@@ -24,6 +24,7 @@ _DEFAULT_MAX_TOKENS = 1024
 class ClaudeClient(BaseLLM):
     """CrewAI-compatible LLM that routes every call through ApiGatekeeper."""
 
+    model: str = _DEFAULT_MODEL  # default so ClaudeClient() needs no arguments
     llm_type: str = "claude-gatekeeper"
     system_prompt: str = _DEFAULT_SYSTEM
 
@@ -35,7 +36,7 @@ class ClaudeClient(BaseLLM):
             data = {**data, "model": _DEFAULT_MODEL}
         return data
 
-    def call(
+    def call(  # type: ignore[override]
         self,
         messages: str | list[dict[str, Any]],
         tools: list[Any] | None = None,

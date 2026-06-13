@@ -110,9 +110,9 @@ class ObsidianManager:
 
         lines += ["## Bug Call Chain", "", "```text"]
         for i, nid in enumerate(chain):
-            node = by_id.get(nid)
+            cn: Node | None = by_id.get(nid)
             prefix = "    → " if i > 0 else ""
-            tag = f"  [L{node.start_line}–{node.end_line}, {node.node_type.value}]" if node else ""
+            tag = f"  [L{cn.start_line}–{cn.end_line}, {cn.node_type.value}]" if cn else ""
             lines.append(f"{prefix}{nid}{tag}")
         lines += ["```", ""]
 

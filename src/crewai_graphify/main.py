@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import anthropic
+from anthropic.types import TextBlock
 from crewai import Crew, Process
 
 from crewai_graphify.agents.crew import navigator_agent, patcher_agent, reader_agent, reasoner_agent
@@ -52,10 +53,11 @@ class _AnthropicClient:
             system=system,
             messages=clean_msgs,  # type: ignore[arg-type]
         )
+        text_blocks = [b for b in msg.content if isinstance(b, TextBlock)]
         return LLMResponse(
             id=msg.id,
             model=msg.model,
-            content=msg.content[0].text if msg.content else "",
+            content=text_blocks[0].text if text_blocks else "",
             usage=UsageStats(
                 input_tokens=msg.usage.input_tokens,
                 output_tokens=msg.usage.output_tokens,

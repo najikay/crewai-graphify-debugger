@@ -351,7 +351,7 @@ Phase 6 wraps the CLI pipeline in a browser-based **Agentic OS** — a three-pan
 │                                                                         │
 │  ┌──────────────┐  ┌──────────────────────────────┐  ┌──────────────┐ │
 │  │  File        │  │  Dependency Graph             │  │  Agent       │ │
-│  │  Explorer    │  │  (React Flow / D3)            │  │  Terminal    │ │
+│  │  Explorer    │  │  (react-force-graph / D3)     │  │  Terminal    │ │
 │  │              │  │                               │  │  (streaming) │ │
 │  │  workspace/  │  │  ● hot node (red)             │  │              │ │
 │  │  ├ target/   │  │  ○ cold node (grey)           │  │  [Navigator] │ │
@@ -383,7 +383,7 @@ Phase 6 wraps the CLI pipeline in a browser-based **Agentic OS** — a three-pan
 | `/api/files` | GET | Lists files under `workspace/` as a JSON tree |
 | `/api/files/{path:path}` | GET | Returns raw content of a sandboxed workspace file |
 
-**Streaming implementation** — `crew.kickoff()` runs inside a `concurrent.futures.ThreadPoolExecutor`. Agent log lines are pushed to an `asyncio.Queue`; the `/api/stream` SSE endpoint drains the queue and forwards each line as a `data:` event.
+**Streaming implementation** — `crew.kickoff()` runs inside a `concurrent.futures.ThreadPoolExecutor`. Agent log lines are pushed to an `asyncio.Queue`; the `/api/stream` SSE endpoint returns `Content-Type: text/event-stream` and drains the queue, forwarding each line as a `data: <line>\n\n` SSE event. A final `event: done\ndata: {}\n\n` signals run completion.
 
 ### 7.3 Frontend — React SPA (`ui/`)
 
@@ -406,7 +406,7 @@ ui/
 
 | Library | Purpose |
 |---|---|
-| `react-flow-renderer` | Interactive node/edge graph with pan, zoom, click |
+| `react-force-graph` | Force-directed D3 node/edge graph with pan, zoom, click |
 | `recharts` | Bar chart for token savings comparison |
 | `xterm.js` | Terminal emulator for streaming agent output |
 | `vite` | Dev server + production bundler |
@@ -414,10 +414,10 @@ ui/
 ### 7.4 Graph Panel (`GraphCanvas.tsx`)
 
 - Fetches `GET /api/graph` on mount.
-- Maps each node to a React Flow `<Node>` with position from a force-directed layout (via `d3-force`).
-- **Hot nodes** (those listed in the Navigator's output) are styled with a red border and elevated z-index.
+- Renders via `react-force-graph` (`<ForceGraph2D>`), which handles force-directed layout and pan/zoom natively using D3 under the hood.
+- **Hot nodes** (those listed in the Navigator's output) are painted red; cold nodes are grey.
 - Clicking a node emits a `nodeSelected` event that highlights the corresponding file and line range in the File Explorer.
-- Edges are directed (`type="smoothstep"`) with label showing the dependency relation.
+- Directed edges carry a label showing the dependency relation.
 
 ### 7.5 Agent Terminal (`AgentTerminal.tsx`)
 

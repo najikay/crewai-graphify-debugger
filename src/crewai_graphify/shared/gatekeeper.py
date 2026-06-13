@@ -52,12 +52,13 @@ class ApiGatekeeper:
     """
 
     _instance: ApiGatekeeper | None = None
+    _initialized: bool = False  # overridden per-instance in __new__
 
     def __new__(cls) -> ApiGatekeeper:
         with _SINGLETON_LOCK:
             if cls._instance is None:
                 obj = super().__new__(cls)
-                obj._initialized = False  # type: ignore[attr-defined]
+                obj._initialized = False
                 cls._instance = obj
         return cls._instance
 
@@ -69,7 +70,7 @@ class ApiGatekeeper:
         version_validator: VersionValidator | None = None,
     ) -> None:
         """Inject dependencies. Idempotent — safe to call more than once."""
-        if self._initialized:  # type: ignore[attr-defined]
+        if self._initialized:
             return
         self._client = client
         self._budget_tracker = budget_tracker
