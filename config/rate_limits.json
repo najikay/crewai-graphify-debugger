@@ -1,0 +1,9 @@
+{
+  "requests_per_minute": 50,
+  "tokens_per_minute": 100000,
+  "tokens_per_day": 2000000,
+  "retry_backoff_seconds": [1, 2, 4, 8, 16],
+  "max_retries": 5,
+  "queue_max_size": 100,
+  "queue_drain_interval_ms": 200
+}

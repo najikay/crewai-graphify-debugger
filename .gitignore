@@ -1,11 +1,85 @@
-# Python-generated files
+# =============================================================================
+# Python artifacts
+# =============================================================================
 __pycache__/
 *.py[oc]
+*.pyd
+
+# Build / distribution
 build/
 dist/
 wheels/
-*.egg-info
+*.egg-info/
+*.egg
+MANIFEST
 
-# Virtual environments
-.venv
+# =============================================================================
+# uv / virtual environments
+# =============================================================================
+.venv/
+venv/
 .env
+.env.*
+!.env.example
+
+# uv lock is intentionally committed; cache is not
+.uv/
+
+# =============================================================================
+# Testing & coverage
+# =============================================================================
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# =============================================================================
+# Linting & type-checking caches
+# =============================================================================
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+
+# =============================================================================
+# workspace/ — dynamically cloned target repos and generated Obsidian vaults
+# =============================================================================
+workspace/
+
+# =============================================================================
+# IDE & editor configuration
+# =============================================================================
+
+# VS Code
+.vscode/
+
+# JetBrains (PyCharm, IntelliJ, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Vim / Neovim
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# =============================================================================
+# Secrets & local config overrides
+# =============================================================================
+*.pem
+*.key
+*.p12
+.secrets/
+secrets.json
+local_settings.py
