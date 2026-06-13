@@ -12,14 +12,12 @@ from typing import Any
 import anthropic
 from crewai import Crew, Process
 
-from crewai_graphify.agents.crew import navigator_agent, reader_agent, reasoner_agent
-from crewai_graphify.agents.tasks import navigator_task, reader_task, reasoner_task
+from crewai_graphify.agents.crew import navigator_agent, patcher_agent, reader_agent, reasoner_agent
+from crewai_graphify.agents.tasks import navigator_task, patcher_task, reader_task, reasoner_task
 from crewai_graphify.models.llm import LLMPayload, LLMResponse, UsageStats
 from crewai_graphify.shared.budget_tracker import BudgetTracker, SessionLedger
 from crewai_graphify.shared.config import AppConfig
 from crewai_graphify.shared.gatekeeper import ApiGatekeeper
-
-__all__ = ["main"]
 
 _log = logging.getLogger(__name__)
 _WORKSPACE = Path("workspace")
@@ -132,10 +130,12 @@ def main() -> None:
     nav = navigator_agent()
     rdr = reader_agent()
     rsn = reasoner_agent()
+    ptr = patcher_agent()
     t1 = navigator_task(nav)
     t2 = reader_task(rdr, t1)
     t3 = reasoner_task(rsn, t2)
-    crew = Crew(agents=[nav, rdr, rsn], tasks=[t1, t2, t3], process=Process.sequential, verbose=True)
+    t4 = patcher_task(ptr, t3)
+    crew = Crew(agents=[nav, rdr, rsn, ptr], tasks=[t1, t2, t3, t4], process=Process.sequential, verbose=True)
     with _budget_session(config) as tracker:
         result = crew.kickoff()
     _save_root_cause(str(result))

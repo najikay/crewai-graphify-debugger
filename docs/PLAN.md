@@ -336,3 +336,114 @@ See `PRD_budget_tracker.md §3.4`.
 - The Anthropic SDK is mocked via `pytest-mock` in all unit and integration tests.
 - A `MockAnthropicClient` fixture is defined in `tests/fixtures/` and injected via dependency injection into `claude_client.py`.
 - Real API calls are made only in a dedicated `tests/e2e/` suite gated behind an `E2E_TEST=1` environment variable.
+
+---
+
+## 7. Phase 6 — Visual Agentic OS UI
+
+### 7.1 Overview
+
+Phase 6 wraps the CLI pipeline in a browser-based **Agentic OS** — a three-panel interface giving users live visibility into the graph-guided debugging workflow. The backend exposes a thin FastAPI server; the frontend is a single-page React app served statically.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│  Visual Agentic OS                                                      │
+│                                                                         │
+│  ┌──────────────┐  ┌──────────────────────────────┐  ┌──────────────┐ │
+│  │  File        │  │  Dependency Graph             │  │  Agent       │ │
+│  │  Explorer    │  │  (React Flow / D3)            │  │  Terminal    │ │
+│  │              │  │                               │  │  (streaming) │ │
+│  │  workspace/  │  │  ● hot node (red)             │  │              │ │
+│  │  ├ target/   │  │  ○ cold node (grey)           │  │  [Navigator] │ │
+│  │  ├ vault/    │  │  ──▶ directed edge            │  │  Selecting   │ │
+│  │  └ reports/  │  │                               │  │  hot nodes…  │ │
+│  │              │  │  Click node → highlight       │  │  [Reader]    │ │
+│  │  Click file  │  │  slice in Explorer            │  │  Reading     │ │
+│  │  → preview   │  │                               │  │  L13–36…    │ │
+│  └──────────────┘  └──────────────────────────────┘  └──────────────┘ │
+│                                                                         │
+│  ┌──────────────────────────────┐  ┌───────────────────────────────┐  │
+│  │  Root-Cause Report           │  │  Token Efficiency Dashboard   │  │
+│  │  (from root_cause_report.json│  │  (from token_efficiency_report│  │
+│  │   rendered as structured     │  │   .md — bar chart + table)    │  │
+│  │   card)                      │  │                               │  │
+│  └──────────────────────────────┘  └───────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### 7.2 Backend — FastAPI Server (`src/crewai_graphify/server.py`)
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/graph` | GET | Returns `workspace/graph.json` as JSON |
+| `/api/run` | POST | Triggers `crew.kickoff()` in a background thread |
+| `/api/stream` | GET (SSE) | Server-Sent Events stream of agent stdout lines |
+| `/api/report/root-cause` | GET | Returns `workspace/root_cause_report.json` |
+| `/api/report/efficiency` | GET | Returns `workspace/token_efficiency_report.md` as text |
+| `/api/files` | GET | Lists files under `workspace/` as a JSON tree |
+| `/api/files/{path:path}` | GET | Returns raw content of a sandboxed workspace file |
+
+**Streaming implementation** — `crew.kickoff()` runs inside a `concurrent.futures.ThreadPoolExecutor`. Agent log lines are pushed to an `asyncio.Queue`; the `/api/stream` SSE endpoint drains the queue and forwards each line as a `data:` event.
+
+### 7.3 Frontend — React SPA (`ui/`)
+
+```
+ui/
+├── src/
+│   ├── components/
+│   │   ├── FileExplorer.tsx      # Recursive tree from /api/files
+│   │   ├── GraphCanvas.tsx       # React Flow graph from /api/graph
+│   │   ├── AgentTerminal.tsx     # EventSource consuming /api/stream
+│   │   ├── RootCauseCard.tsx     # Structured JSON report renderer
+│   │   └── EfficiencyChart.tsx   # Recharts bar chart + summary table
+│   ├── App.tsx                   # Three-panel layout (CSS Grid)
+│   └── main.tsx                  # Vite entry point
+├── package.json
+└── vite.config.ts                # Proxy /api → localhost:8000
+```
+
+**Key libraries:**
+
+| Library | Purpose |
+|---|---|
+| `react-flow-renderer` | Interactive node/edge graph with pan, zoom, click |
+| `recharts` | Bar chart for token savings comparison |
+| `xterm.js` | Terminal emulator for streaming agent output |
+| `vite` | Dev server + production bundler |
+
+### 7.4 Graph Panel (`GraphCanvas.tsx`)
+
+- Fetches `GET /api/graph` on mount.
+- Maps each node to a React Flow `<Node>` with position from a force-directed layout (via `d3-force`).
+- **Hot nodes** (those listed in the Navigator's output) are styled with a red border and elevated z-index.
+- Clicking a node emits a `nodeSelected` event that highlights the corresponding file and line range in the File Explorer.
+- Edges are directed (`type="smoothstep"`) with label showing the dependency relation.
+
+### 7.5 Agent Terminal (`AgentTerminal.tsx`)
+
+- Opens an `EventSource` to `/api/stream` when the user clicks **Run**.
+- Each SSE `data:` line is appended to an `xterm.js` terminal instance.
+- Agent boundaries (`[Navigator]`, `[Reader]`, `[Reasoner]`) are detected via prefix matching and rendered in distinct ANSI colors (cyan / yellow / magenta).
+- On `event: done`, the terminal displays a success banner and the Run button re-enables.
+
+### 7.6 Directory Layout Addition
+
+```
+crewai-graphify-debugger/
+├── src/crewai_graphify/
+│   └── server.py          # FastAPI app (≤ 150 lines)
+├── ui/                    # React/Vite frontend
+│   ├── src/
+│   └── package.json
+└── scripts/
+    └── dev.sh             # Runs uvicorn + vite concurrently
+```
+
+### 7.7 Implementation Order
+
+1. **`server.py`** — FastAPI + SSE endpoint (no UI dependency)
+2. **`FileExplorer` + `/api/files`** — file tree wiring
+3. **`GraphCanvas`** — static graph render from `/api/graph`
+4. **`AgentTerminal`** — live streaming via SSE
+5. **`RootCauseCard` + `EfficiencyChart`** — report panels (post-run)
+6. **Integration** — hot-node click → file highlight cross-panel event
