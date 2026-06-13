@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -14,7 +13,6 @@ from crewai_graphify.main import (
     _sanitize_messages,
     _save_efficiency_report,
     _save_root_cause,
-    _ThrottledRateLimiter,
 )
 from crewai_graphify.shared.budget_tracker import SessionLedger
 from crewai_graphify.shared.gatekeeper import ApiGatekeeper
@@ -108,14 +106,6 @@ class TestSaveEfficiencyReport:
             _save_efficiency_report(ledger)  # must not raise
 
 
-class TestThrottledRateLimiter:
-    def test_enqueue_sleeps(self) -> None:
-        rl = _ThrottledRateLimiter()
-        with patch.object(time, "sleep") as mock_sleep:
-            rl.enqueue(MagicMock())
-            mock_sleep.assert_called_once_with(0.5)
-
-
 class TestBudgetSession:
     def test_yields_budget_tracker(self, tmp_path: Path) -> None:
         from crewai_graphify.shared.budget_tracker import BudgetTracker
@@ -127,7 +117,7 @@ class TestBudgetSession:
 
         with (
             patch("crewai_graphify.main._AnthropicClient", return_value=mock_client),
-            patch("crewai_graphify.main._ThrottledRateLimiter", return_value=mock_rl),
+            patch("crewai_graphify.main.ThrottledRateLimiter", return_value=mock_rl),
             _budget_session(cfg) as tracker,
         ):
             assert isinstance(tracker, BudgetTracker)

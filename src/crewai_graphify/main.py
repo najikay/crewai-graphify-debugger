@@ -4,7 +4,6 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
-import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -18,6 +17,7 @@ from crewai_graphify.models.llm import LLMPayload, LLMResponse, UsageStats
 from crewai_graphify.shared.budget_tracker import BudgetTracker, SessionLedger
 from crewai_graphify.shared.config import AppConfig
 from crewai_graphify.shared.gatekeeper import ApiGatekeeper
+from crewai_graphify.shared.rate_limiter import ThrottledRateLimiter
 
 _log = logging.getLogger(__name__)
 _WORKSPACE = Path("workspace")
@@ -64,13 +64,6 @@ class _AnthropicClient:
         )
 
 
-class _ThrottledRateLimiter:
-    """500 ms pause between dispatches avoids rate-limit 429s."""
-
-    def enqueue(self, payload: LLMPayload) -> None:  # noqa: ARG002
-        time.sleep(0.5)
-
-
 @contextlib.contextmanager
 def _budget_session(config: AppConfig) -> Iterator[BudgetTracker]:
     """Yield a fresh BudgetTracker after wiring it into ApiGatekeeper."""
@@ -78,7 +71,7 @@ def _budget_session(config: AppConfig) -> Iterator[BudgetTracker]:
     ApiGatekeeper().initialize(
         client=_AnthropicClient(),
         budget_tracker=tracker,
-        rate_limiter=_ThrottledRateLimiter(),
+        rate_limiter=ThrottledRateLimiter(),
     )
     yield tracker
 

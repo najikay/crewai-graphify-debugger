@@ -1,16 +1,23 @@
-"""Budget Tracker — logs token usage and computes running session cost."""
+"""Budget Tracker — logs token usage, computes session cost, flushes ledger."""
 from __future__ import annotations
 
+import json
 import logging
+import os
+from pathlib import Path
 
 from pydantic import BaseModel
 
 from crewai_graphify.models.llm import LLMPayload, LLMResponse, ModelPricing
 from crewai_graphify.shared.config import AppConfig
 
-__all__ = ["BudgetTracker", "SessionLedger"]
+__all__ = ["BudgetExceededError", "BudgetTracker", "SessionLedger"]
 
 _log = logging.getLogger(__name__)
+
+
+class BudgetExceededError(Exception):
+    """Raised by ``check_pre_call`` when the session budget ceiling is exceeded."""
 
 
 class SessionLedger(BaseModel, frozen=True):
@@ -26,27 +33,38 @@ class SessionLedger(BaseModel, frozen=True):
 class BudgetTracker:
     """Implements _BudgetTrackerProtocol — wires into ApiGatekeeper."""
 
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(self, config: AppConfig, ledger_path: Path | None = None) -> None:
         self._config = config
+        self._ledger_path = ledger_path
         self._total_cost: float = 0.0
         self._transactions: int = 0
         self._est_input_tokens: int = 0
         self._actual_input_tokens: int = 0
         self._actual_output_tokens: int = 0
 
+    def _flush_ledger(self) -> None:
+        """Atomically write the current ledger snapshot to disk (no-op if no path)."""
+        if self._ledger_path is None:
+            return
+        self._ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self._ledger_path.with_suffix(".tmp")
+        tmp.write_text(
+            json.dumps(self.get_session_ledger().model_dump(), indent=2),
+            encoding="utf-8",
+        )
+        os.replace(tmp, self._ledger_path)
+
     def pricing_for(self, model: str) -> ModelPricing:
         return self._config.pricing_for(model)
 
     def check_pre_call(self, estimated_cost: float) -> None:
-        """Warn if session would exceed the ceiling. Never raises."""
+        """Raise BudgetExceededError if ceiling exceeded; warn at threshold."""
         projected = self._total_cost + estimated_cost
         ceiling = self._config.ceiling_usd
         pct = (projected / ceiling) * 100 if ceiling > 0 else 0.0
         if projected > ceiling:
-            _log.warning(
-                "Budget ceiling exceeded: $%.4f projected > $%.2f ceiling",
-                projected,
-                ceiling,
+            raise BudgetExceededError(
+                f"Budget ceiling exceeded: ${projected:.4f} projected > ${ceiling:.2f} ceiling"
             )
         elif pct >= self._config.warning_threshold_pct:
             _log.warning(
@@ -74,6 +92,7 @@ class BudgetTracker:
             response.usage.output_tokens,
             estimated_cost,
         )
+        self._flush_ledger()
 
     def get_session_ledger(self) -> SessionLedger:
         """Return an immutable snapshot of the current session totals."""

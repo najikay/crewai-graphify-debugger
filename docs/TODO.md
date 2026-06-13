@@ -175,8 +175,8 @@
 
 ### 3.5 Rate Limiter
 
-- [~] **3.5.1** Rate limiting between API dispatches implemented.  
-  → verify: `_ThrottledRateLimiter` in `main.py` applies 500 ms inter-call pause via `time.sleep(0.5)`. _(Simpler than spec — no FIFO deque; sufficient for single-run telemetry.)_ ✓
+- [X] **3.5.1** Rate limiting extracted to dedicated `shared/rate_limiter.py` module.  
+  → verify: `ThrottledRateLimiter` is public class in `shared/rate_limiter.py` (13 lines); `main.py` imports and uses it; `test_rate_limiter.py` (4 tests) covers 100% of the module. ✓
 
 - [ ] **3.5.2** FIFO queue with RPM/TPM backpressure.  
   → _(Not implemented — 500 ms fixed delay used instead.)_
@@ -192,20 +192,20 @@
 - [X] **3.6.1** `shared/budget_tracker.py`: `BudgetTracker` with `record_transaction` and `check_pre_call`.  
   → verify: mypy passes; file ≤ 150 lines (88 lines); 100% branch coverage. ✓
 
-- [~] **3.6.2** `check_pre_call` enforces budget ceiling.  
-  → verify: Emits `WARNING` log when ceiling is exceeded; does NOT raise (per Phase 3 design decision — soft ceiling for telemetry-first runs). `test_budget_tracker.py::TestCheckPreCall` confirms warning is emitted. ✓
+- [X] **3.6.2** `check_pre_call` raises `BudgetExceededError` when ceiling is exceeded.  
+  → verify: `BudgetExceededError(Exception)` defined in `budget_tracker.py`; `check_pre_call` raises it with projected/ceiling cost info when `projected > ceiling`; `TestCheckPreCall::test_raises_budget_exceeded_error_over_ceiling` and `test_exception_message_contains_projected_cost` pass. ✓
 
 - [X] **3.6.3** 90% WARNING threshold with logged alert.  
   → verify: `check_pre_call` logs warning at `warning_threshold_pct` (configured at 90%). ✓
 
-- [ ] **3.6.4** Atomic ledger flush to disk via `temp + os.replace`.  
-  → _(Not implemented — ledger lives in-memory; `get_session_ledger()` returns snapshot on demand.)_
+- [X] **3.6.4** Atomic ledger flush to disk via `temp + os.replace`.  
+  → verify: `BudgetTracker._flush_ledger()` writes to `.tmp` then calls `os.replace()` for atomic swap; called from `record_transaction()`; `TestAtomicFlush` (5 tests) covers write, valid JSON, tmp cleanup, no-op, and nested-dir creation — all passing. ✓
 
 - [X] **3.6.5** `get_session_ledger() -> SessionLedger` returns a frozen snapshot.  
   → verify: `test_budget_tracker.py::TestSessionLedger::test_session_ledger_is_frozen` passes. ✓
 
-- [ ] **3.6.6** `BudgetExceededError` class with payload fields.  
-  → _(Not implemented — budget tracker warns only.)_
+- [X] **3.6.6** `BudgetExceededError` exception class.  
+  → verify: `class BudgetExceededError(Exception)` present in `budget_tracker.py`; exported in `__all__`; raised by `check_pre_call` with descriptive message including projected and ceiling costs. ✓
 
 ### 3.7 API Gatekeeper
 
@@ -332,7 +332,7 @@
 ### 5.4 Unit Test Suite — All Quality Gates
 
 - [X] **5.4.1** Overall branch coverage ≥ 85%.  
-  → verify: `uv run pytest` → **94.74% branch coverage** (149 tests). ✓
+  → verify: `uv run pytest` → **94.89% branch coverage** (157 tests). ✓
 
 - [X] **5.4.2** `ruff check .` exits 0.  
   → verify: 0 violations on every run throughout Phases 1–5. ✓
