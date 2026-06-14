@@ -20,24 +20,29 @@ def navigator_task(navigator: Agent) -> Task:
     return Task(
         name="navigator_task",
         description=(
-            "Read the file ``hot.md`` from the vault using the "
-            "``read_vault_document`` tool.  Extract:\n"
-            "1. The name of the source file most likely to contain the bug.\n"
-            "2. The class or function at the root of the hot call chain.\n"
-            "3. The ordered list of nodes in the dependency chain (hottest first).\n"
-            "Return these three items as a structured plain-text summary."
+            "You MUST physically call the ``read_vault_document`` tool with "
+            "filename='hot.md'. You are STRICTLY FORBIDDEN from guessing, "
+            "imagining, or predicting file names, node names, or any content. "
+            "Your output MUST contain only the actual file paths and component "
+            "names returned by the tool — nothing invented.\n"
+            "Extract and report:\n"
+            "1. The Primary Target File path (from the tool output).\n"
+            "2. The Root-Cause Node name (from the tool output).\n"
+            "3. The ordered dependency chain (hottest first, from tool output)."
         ),
         expected_output=(
-            "A plain-text summary containing: the target source file name, "
-            "the root-cause class/function name, and an ordered dependency chain."
+            "A plain-text summary with: the exact target source file path, "
+            "the root-cause class/function name, and an ordered dependency chain "
+            "— all sourced from the vault document, nothing invented."
         ),
         agent=navigator,
         tools=[read_vault_document],
     )
 
 
-def reader_task(reader: Agent, nav_task: Task) -> Task:
+def reader_task(reader: Agent, nav_task: Task, retry_hint: str = "") -> Task:
     """Task 2 — fetch exact code slices (capped by _MAX_READS)."""
+    hint = f"\n\n{retry_hint}" if retry_hint else ""
     return Task(
         name="reader_task",
         description=(
@@ -45,7 +50,7 @@ def reader_task(reader: Agent, nav_task: Task) -> Task:
             "class or function in the dependency chain.  Supply ``start_line`` "
             "and ``end_line`` for every call — never read an entire file.  "
             "If the tool returns a read-cap error, stop immediately and pass "
-            "whatever slices you have collected to the Reasoner."
+            f"whatever slices you have collected to the Reasoner.{hint}"
         ),
         expected_output=(
             "All relevant code slices, each labelled with its node name and "
@@ -57,8 +62,9 @@ def reader_task(reader: Agent, nav_task: Task) -> Task:
     )
 
 
-def reasoner_task(reasoner: Agent, read_task: Task) -> Task:
+def reasoner_task(reasoner: Agent, read_task: Task, retry_hint: str = "") -> Task:
     """Task 3 — synthesise a Hypothesis JSON from the code slices."""
+    hint = f"\n\n{retry_hint}" if retry_hint else ""
     return Task(
         name="reasoner_task",
         description=(
@@ -68,7 +74,7 @@ def reasoner_task(reasoner: Agent, read_task: Task) -> Task:
             '  "confidence_score" — float 0.0–1.0; set < 0.7 if you need\n'
             "                       more slices (signals re-read to Patcher)\n"
             '  "requested_diff"   — {"original_code": ..., "new_code": ...}\n'
-            "Output raw JSON only — no markdown fences or preamble."
+            f"Output raw JSON only — no markdown fences or preamble.{hint}"
         ),
         expected_output=(
             'A raw JSON Hypothesis: {"root_cause": ..., "confidence_score": ..., '

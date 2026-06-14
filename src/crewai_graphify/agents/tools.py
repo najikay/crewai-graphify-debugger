@@ -5,6 +5,7 @@ to the local repository.  Tools return plain strings for direct LLM consumption.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from crewai.tools import tool
@@ -55,9 +56,18 @@ def read_vault_document(filename: str) -> str:
 def read_code_slice(file_path: str, start_line: int, end_line: int) -> str:
     """Read a contiguous slice of lines from a Python source file.
 
-    ``file_path`` is relative to ``workspace/target/``.  ``start_line`` and
-    ``end_line`` are 1-based and inclusive.  Capped at _MAX_READS per run.
+    Action Input MUST be a flat JSON object with EXACTLY these keys:
+      "file_path"  : string  — path relative to workspace/target/
+                               (e.g. "broken-python/polygons.py")
+      "start_line" : integer — first line to read, 1-based inclusive
+      "end_line"   : integer — last line to read, 1-based inclusive
+    Example: {"file_path": "broken-python/f.py", "start_line": 1, "end_line": 20}
+    Capped at _MAX_READS calls per pipeline run.
     """
+    target_abs = os.path.abspath(str(_TARGET))
+    resolved = os.path.abspath(str(_TARGET / file_path))
+    if not resolved.startswith(target_abs + os.sep):
+        raise ValueError("Path outside target directory")
     if _read_counter.increment() > _MAX_READS:
         return f"[ERROR] Read cap reached ({_MAX_READS} reads maximum per run)."
     if start_line < 1 or end_line < start_line:
@@ -76,11 +86,20 @@ def read_code_slice(file_path: str, start_line: int, end_line: int) -> str:
 
 @tool("apply_patch")
 def apply_patch(file_path: str, original_code: str, new_code: str) -> str:
-    """Replace ``original_code`` with ``new_code`` in a target file (first match).
+    """Replace original_code with new_code in a target source file (first match).
 
-    ``file_path`` is relative to ``workspace/target/``.  Returns an error
-    string if the file does not exist or the original snippet is not found.
+    Action Input MUST be a flat JSON object with EXACTLY these keys:
+      "file_path"     : string — path relative to workspace/target/
+                                 (e.g. "broken-python/polygons.py")
+      "original_code" : string — the exact verbatim snippet to replace
+      "new_code"      : string — the replacement code
+    Example: {"file_path": "broken-python/f.py", "original_code": "x=1", "new_code": "x=2"}
+    Returns an error string if the file does not exist or the snippet is not found.
     """
+    target_abs = os.path.abspath(str(_TARGET))
+    resolved = os.path.abspath(str(_TARGET / file_path))
+    if not resolved.startswith(target_abs + os.sep):
+        raise ValueError("Path outside target directory")
     path = _TARGET / file_path
     if not path.exists():
         return f"[ERROR] Target file not found: {file_path}"

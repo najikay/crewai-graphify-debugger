@@ -51,9 +51,17 @@ class TestBuildCrew:
         """Each task receives the previous task's output as its context argument."""
         build_crew()
         m = mocked_crew
-        m["rdr_task"].assert_called_once_with(m["rdr_agent"].return_value, m["nav_task"].return_value)
-        m["rsn_task"].assert_called_once_with(m["rsn_agent"].return_value, m["rdr_task"].return_value)
+        m["rdr_task"].assert_called_once_with(m["rdr_agent"].return_value, m["nav_task"].return_value, retry_hint="")
+        m["rsn_task"].assert_called_once_with(m["rsn_agent"].return_value, m["rdr_task"].return_value, retry_hint="")
         m["ptr_task"].assert_called_once_with(m["ptr_agent"].return_value, m["rsn_task"].return_value)
+
+    def test_retry_hint_forwarded_to_reader_and_reasoner(self, mocked_crew) -> None:  # type: ignore[no-untyped-def]
+        """retry_hint must reach reader_task and reasoner_task but not patcher_task."""
+        build_crew(retry_hint="expand lines 15-50")
+        m = mocked_crew
+        assert m["rdr_task"].call_args.kwargs["retry_hint"] == "expand lines 15-50"
+        assert m["rsn_task"].call_args.kwargs["retry_hint"] == "expand lines 15-50"
+        assert "retry_hint" not in (m["ptr_task"].call_args.kwargs or {})
 
     def test_crew_uses_sequential_process_and_verbose(self, mocked_crew) -> None:  # type: ignore[no-untyped-def]
         """Crew must be constructed with Process.sequential and verbose=True."""

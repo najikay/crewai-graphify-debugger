@@ -120,6 +120,10 @@ class TestReadCodeSlice:
             result = read_code_slice._run(file_path="f.py", start_line=2, end_line=999)
         assert "b" in result and "c" in result
 
+    def test_path_traversal_raises_value_error(self, tmp_path: Path) -> None:
+        with patch(_TARGET, tmp_path), pytest.raises(ValueError, match="Path outside target directory"):
+            read_code_slice._run(file_path="../../etc/passwd", start_line=1, end_line=5)
+
     def test_tool_name(self) -> None:
         assert read_code_slice.name == "read_code_slice"
 
@@ -201,6 +205,10 @@ class TestApplyPatch:
                 file_path="f.py", original_code="hello world", new_code="bye"
             )
         assert "11" in result  # len("hello world") == 11
+
+    def test_path_traversal_raises_value_error(self, tmp_path: Path) -> None:
+        with patch(_TARGET, tmp_path), pytest.raises(ValueError, match="Path outside target directory"):
+            apply_patch._run(file_path="../../secret.py", original_code="x", new_code="y")
 
     def test_tool_name(self) -> None:
         assert apply_patch.name == "apply_patch"

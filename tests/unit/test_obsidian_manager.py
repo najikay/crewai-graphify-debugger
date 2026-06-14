@@ -78,8 +78,19 @@ class TestSaveHotMd:
         content = manager.save_hot_md(graph).read_text()
         assert "calc_polygon_details" in content and "Polygon" in content
 
-    def test_syntax_error_documented(self, manager: ObsidianManager, graph: Graph) -> None:
-        assert "SyntaxError" in manager.save_hot_md(graph).read_text()
+    def test_primary_target_file_present(self, manager: ObsidianManager, graph: Graph) -> None:
+        assert "Primary Target File" in manager.save_hot_md(graph).read_text()
+
+    def test_root_cause_node_present(self, manager: ObsidianManager, graph: Graph) -> None:
+        assert "Root-Cause Node" in manager.save_hot_md(graph).read_text()
+
+    def test_nodes_in_primary_file_section(self, manager: ObsidianManager, graph: Graph) -> None:
+        assert "## Nodes in Primary Target File" in manager.save_hot_md(graph).read_text()
+
+    def test_empty_graph_falls_back_to_graph_file_path(self, manager: ObsidianManager) -> None:
+        empty = Graph(file_path="x.py")
+        content = manager.save_hot_md(empty).read_text()
+        assert "x.py" in content
 
     def test_docstring_rendered(self, manager: ObsidianManager, graph: Graph) -> None:
         assert "A polygon." in manager.save_hot_md(graph).read_text()

@@ -17,6 +17,7 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from crewai_graphify.agents.pipeline import build_crew
 from crewai_graphify.main import _AnthropicClient, _save_efficiency_report, _save_root_cause
+from crewai_graphify.shared.archiver import archive_run
 from crewai_graphify.shared.budget_tracker import BudgetTracker
 from crewai_graphify.shared.config import AppConfig
 from crewai_graphify.shared.fixture_setup import ensure_fixture
@@ -26,9 +27,12 @@ from crewai_graphify.shared.sse_log import _QueueLogHandler, _StdoutToQueue
 
 _VAULT_GRAPH = Path("workspace/vault/graph.json")
 _TARGET = Path("workspace/target")
+_RESULTS = Path("workspace/results")
 _EXECUTOR: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
 _SSE_QUEUE: asyncio.Queue[str | None] = asyncio.Queue()
 _run_active: bool = False
+_SKIP = "SKIPPED"
+_RETRY_HINT = "Previous read was insufficient. You MUST expand your line range (e.g., read lines 15-50) to find the missing implementation details."
 
 app = FastAPI(title="CrewAI Graphify — Visual Agentic OS")
 app.add_middleware(
@@ -61,11 +65,20 @@ def _run_pipeline(loop: asyncio.AbstractEventLoop) -> None:
             budget_tracker=tracker,
             rate_limiter=ThrottledRateLimiter(),
         )
-        crew = build_crew()
-        with redirect_stdout(_StdoutToQueue(loop, _SSE_QUEUE, sys.stdout)):
-            result = crew.kickoff()
+        retry_hint = ""
+        result: Any = ""
+        for _attempt in range(3):
+            crew = build_crew(retry_hint=retry_hint)
+            with redirect_stdout(_StdoutToQueue(loop, _SSE_QUEUE, sys.stdout)):
+                result = crew.kickoff()
+            if _SKIP not in str(result):
+                break
+            retry_hint = _RETRY_HINT
+            _push(f"INFO: Attempt {_attempt + 1}/3 skipped — retrying with expanded context…")
         _save_root_cause(str(result))
         _save_efficiency_report(tracker.get_session_ledger())
+        if _SKIP not in str(result):
+            archive_run(str(result), _push)
     except Exception as exc:  # noqa: BLE001
         loop.call_soon_threadsafe(_SSE_QUEUE.put_nowait, f"ERROR: {exc}")
     finally:
@@ -107,13 +120,12 @@ async def reset_workspace() -> dict[str, str]:
 
 @app.get("/api/file")
 async def get_file(path: str) -> PlainTextResponse:
-    """Return raw text of a file inside workspace/target/ (path-traversal safe)."""
-    fp = (_TARGET / path).resolve()
-    if not fp.is_relative_to(_TARGET.resolve()):
-        raise HTTPException(status_code=403, detail="Access denied.")
-    if not fp.exists():
-        raise HTTPException(status_code=404, detail=f"{path} not found.")
-    return PlainTextResponse(fp.read_text(encoding="utf-8"))
+    """Serve files from workspace/target/ or workspace/results/ (traversal-safe)."""
+    for base in (_TARGET, _RESULTS):
+        fp = (base / path).resolve()
+        if fp.is_relative_to(base.resolve()) and fp.exists():
+            return PlainTextResponse(fp.read_text(encoding="utf-8"))
+    raise HTTPException(status_code=404, detail=f"{path} not found.")
 
 
 @app.get("/api/stream")
