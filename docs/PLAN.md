@@ -1,9 +1,9 @@
 # Architecture & Technical Design Plan
 
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **Status:** Active  
 **Owner:** Senior Software Architect  
-**Last Updated:** 2026-06-13
+**Last Updated:** 2026-06-14
 
 ---
 
@@ -329,7 +329,7 @@ See `PRD_budget_tracker.md §3.4`.
 | `agents/` | 85% |
 | `models/` | 80% |
 | `sdk/` | 75% (integration-tested separately) |
-| **Overall** | **≥ 85%** |
+| **Overall** | **≥ 90%** |
 
 ### 6.2 Test Doubles
 
@@ -373,22 +373,25 @@ Phase 6 wraps the CLI pipeline in a browser-based **Agentic OS** — a three-pan
 
 ### 7.2 Backend — FastAPI Server (`src/crewai_graphify/server.py`)
 
-**Phase 7 Foundation (implemented):**
+**Implemented endpoints:**
 
 | Endpoint | Method | Description |
 |---|---|---|
 | `/api/graph` | GET | Returns `workspace/vault/graph.json` as JSON (404 if not yet built) |
-| `/api/execute` | POST 202 | Fires `crew.kickoff()` in a `ThreadPoolExecutor`; 409 if already running |
+| `/api/execute` | POST 202 | Fires retry loop (`≤3 × crew.kickoff()`) in a `ThreadPoolExecutor`; 409 if already running |
 | `/api/stream` | GET (SSE) | `text/event-stream` — yields `data: {"log": "..."}` per log line; ends with `event: done` |
+| `/api/reset` | POST | Wipes `workspace/target/`, restores pristine fixture, rebuilds vault; 409 if run active |
+| `/api/file` | GET `?path=<rel\|abs>` | Returns raw text of a file inside `workspace/target/` **or** `workspace/results/`; accepts relative or absolute paths; path-traversal safe via `is_relative_to` checks against each allowed base |
 
-**Phase 7 Future (planned):**
+**Planned endpoints:**
 
 | Endpoint | Method | Description |
 |---|---|---|
 | `/api/report/root-cause` | GET | Returns `workspace/root_cause_report.json` |
 | `/api/report/efficiency` | GET | Returns `workspace/token_efficiency_report.md` as text |
 | `/api/files` | GET | Lists files under `workspace/` as a JSON tree |
-| `/api/files/{path:path}` | GET | Returns raw content of a sandboxed workspace file |
+
+**Cyclic re-read retry loop** — `_run_pipeline` in `server.py` wraps `crew.kickoff()` in a `for _attempt in range(3)` loop. If the Patcher outputs `"SKIPPED"` (confidence < 0.7), the loop appends `_RETRY_HINT` to the Reader and Reasoner task descriptions via `build_crew(retry_hint=...)` and re-runs the entire crew. On a non-SKIPPED result, the loop breaks immediately. A `INFO: Attempt N/3 skipped…` message is pushed to the SSE terminal on each retry so the user can monitor progress.
 
 **Streaming implementation** — `crew.kickoff()` runs inside a `concurrent.futures.ThreadPoolExecutor`. Agent log lines are pushed to an `asyncio.Queue`; the `/api/stream` SSE endpoint returns `Content-Type: text/event-stream` and drains the queue, forwarding each line as a `data: <line>\n\n` SSE event. A final `event: done\ndata: {}\n\n` signals run completion.
 
@@ -450,6 +453,106 @@ crewai-graphify-debugger/
 └── scripts/
     └── dev.sh             # Runs uvicorn + vite concurrently
 ```
+
+---
+
+## 8. Multi-Provider LLM Factory (Environment Toggle)
+
+### 8.1 Overview
+
+The `_make_llm()` factory in `src/crewai_graphify/agents/crew.py` decouples agent
+LLM selection from source code.  Switching providers requires only environment
+variable changes — no code edits.
+
+### 8.2 Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `LLM_PROVIDER` | `claude` | Active provider: `claude` or `deepseek` |
+| `DEFAULT_MODEL` | _(provider-specific)_ | Model name passed to the provider |
+| `DEEPSEEK_API_KEY` | _(empty)_ | DeepSeek API key (required when `LLM_PROVIDER=deepseek`) |
+
+### 8.3 Routing Logic
+
+```python
+provider = os.getenv("LLM_PROVIDER", "claude").lower()
+if provider == "deepseek":
+    model = os.getenv("DEFAULT_MODEL", "deepseek-chat")
+    return CrewLLM(model=f"deepseek/{model}", api_key=os.getenv("DEEPSEEK_API_KEY", ""))
+return ClaudeClient()   # default — routes through ApiGatekeeper
+```
+
+`ClaudeClient` continues to route through `ApiGatekeeper` for budget/rate-limit
+telemetry.  `CrewLLM` (via litellm) bypasses the gatekeeper; budget tracking for
+third-party providers is a Phase 9 item.
+
+### 8.4 `.env` Usage
+
+Create a `.env` file at the project root (already in `.gitignore`):
+
+```dotenv
+# Switch to DeepSeek
+LLM_PROVIDER=deepseek
+DEFAULT_MODEL=deepseek-chat
+DEEPSEEK_API_KEY=sk-...
+
+# Or stay on Claude (default — no entry needed)
+# LLM_PROVIDER=claude
+```
+
+Loading is automatic: `shared/env.py` calls `dotenv.load_dotenv()` on import, and
+`server.py` imports it as its first dependency so the variables are present before
+any agent (and therefore `_make_llm()`) is constructed.
+
+---
+
+## 9. Run Integrity Pipeline
+
+The pipeline hardens the path from "agent claims success" to "verified physical
+fix" with four cooperating mechanisms.
+
+### 9.1 Force-Fed Navigator Context
+
+`pipeline.py::build_crew()` reads `workspace/vault/hot.md` and returns
+`(Crew, {"hot_md_content": ...})`. `server.py` calls
+`crew.kickoff(inputs={"hot_md_content": ...})`, and `navigator_task` interpolates
+the report via a `{hot_md_content}` template. The Navigator has `tools=[]` — it
+cannot call out for context, so it cannot fabricate file names.
+
+### 9.2 Context Isolation (Reasoner → Patcher)
+
+The Reasoner emits a Hypothesis JSON with an explicit `target_file` key copied
+verbatim from the Reader's slice header. The Patcher task is wired with
+`context=[reason_task]` (Reasoner output only — no run-history leak) and is
+instructed to use `target_file` exactly, FORBIDDEN from guessing or reusing any
+other filename. This fixes the cross-file leak where the Patcher diffed
+`polygons.py` while the Reasoner had diagnosed `mathsquiz-step3.py`.
+
+### 9.3 Patch Integrity Guard
+
+`tools.py::apply_patch` rejects two classes of trivial patch before touching disk:
+
+1. `original_code == new_code` (pure no-op, e.g. `print` → `print`).
+2. `len(original_code.strip()) < _MIN_PATCH_LEN` (target too small to be specific).
+
+Combined with the glob path-resolution fallback (`_resolve_target_path`, §FR-17),
+the Patcher binds to the correct on-disk file and can only make a real change.
+
+### 9.4 Post-Run Archiver & Validation Gate
+
+`shared/archiver.py::archive_run()` runs after a non-SKIPPED result:
+
+```
+_detect_changes()  →  filecmp.cmp(target/broken-python/**.py, fixtures/original_buggy)
+   ├── no diff  → push "❌ VALIDATION FAILED: no physical changes detected"
+   └── diff     → copy target → workspace/results/run_<YYYYMMDD_HHMMSS>/
+                  write run_summary.txt (file list + unified diff + agent answer)
+                  push "✅ VALIDATION PASSED: archived to …/run_<ts>"
+```
+
+The unified diff (`difflib.unified_diff` vs the pristine fixture) makes every
+archived run self-documenting. The validator is what the §9.3 guard protects:
+without it, a no-op patch could leave a byte unchanged and silently "pass".
 
 ### 7.7 Implementation Order
 

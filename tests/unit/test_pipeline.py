@@ -37,9 +37,28 @@ def mocked_crew():  # type: ignore[no-untyped-def]
 
 class TestBuildCrew:
     def test_returns_crew_instance(self, mocked_crew) -> None:  # type: ignore[no-untyped-def]
-        """build_crew() must return the Crew() return value."""
-        result = build_crew()
-        assert result is mocked_crew["Crew"].return_value
+        """build_crew() must return (Crew instance, inputs dict) tuple."""
+        crew, inputs = build_crew()
+        assert crew is mocked_crew["Crew"].return_value
+
+    def test_returns_inputs_dict_with_hot_md_key(self, mocked_crew) -> None:  # type: ignore[no-untyped-def]
+        """Inputs dict must contain the hot_md_content key."""
+        _, inputs = build_crew()
+        assert "hot_md_content" in inputs
+
+    def test_hot_md_content_read_when_file_exists(self, mocked_crew, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """hot_md_content must contain the file text when hot.md exists."""
+        hot = tmp_path / "hot.md"
+        hot.write_text("# vault report", encoding="utf-8")
+        with patch("crewai_graphify.agents.pipeline._HOT_MD", hot):
+            _, inputs = build_crew()
+        assert inputs["hot_md_content"] == "# vault report"
+
+    def test_hot_md_content_empty_when_file_missing(self, mocked_crew, tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """hot_md_content must be empty string when hot.md is absent."""
+        with patch("crewai_graphify.agents.pipeline._HOT_MD", tmp_path / "no.md"):
+            _, inputs = build_crew()
+        assert inputs["hot_md_content"] == ""
 
     def test_all_four_agents_created(self, mocked_crew) -> None:  # type: ignore[no-untyped-def]
         """All four agent factories must be called exactly once."""
@@ -51,9 +70,15 @@ class TestBuildCrew:
         """Each task receives the previous task's output as its context argument."""
         build_crew()
         m = mocked_crew
-        m["rdr_task"].assert_called_once_with(m["rdr_agent"].return_value, m["nav_task"].return_value, retry_hint="")
-        m["rsn_task"].assert_called_once_with(m["rsn_agent"].return_value, m["rdr_task"].return_value, retry_hint="")
-        m["ptr_task"].assert_called_once_with(m["ptr_agent"].return_value, m["rsn_task"].return_value)
+        m["rdr_task"].assert_called_once_with(
+            m["rdr_agent"].return_value, m["nav_task"].return_value, retry_hint=""
+        )
+        m["rsn_task"].assert_called_once_with(
+            m["rsn_agent"].return_value, m["rdr_task"].return_value, retry_hint=""
+        )
+        m["ptr_task"].assert_called_once_with(
+            m["ptr_agent"].return_value, m["rsn_task"].return_value
+        )
 
     def test_retry_hint_forwarded_to_reader_and_reasoner(self, mocked_crew) -> None:  # type: ignore[no-untyped-def]
         """retry_hint must reach reader_task and reasoner_task but not patcher_task."""

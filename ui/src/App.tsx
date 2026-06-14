@@ -36,6 +36,25 @@ interface FgData { nodes: GNode[]; links: FgLink[] }
 const EMPTY: FgData = { nodes: [], links: [] };
 type GraphStatus = "idle" | "loading" | "ok" | "error";
 
+// ── Terminal keyword highlighter ──────────────────────────────────────────────
+const KW_RE = /(\[Agent\]|Task:|Final Answer:)/;
+function highlightLog(line: string) {
+  const parts = line.split(KW_RE);
+  if (parts.length === 1) return line;
+  return (
+    <>
+      {parts.map((p, i) =>
+        i % 2 === 1
+          ? <span key={i} className={
+              p === "[Agent]" ? "kw-agent" :
+              p === "Task:"   ? "kw-task"  : "kw-final"
+            }>{p}</span>
+          : p
+      )}
+    </>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -225,6 +244,13 @@ export default function App() {
           </button>
         </div>
 
+        <div className="graph-legend">
+          <span>🟢 Patched</span>
+          <span className="legend-sep">|</span>
+          <span>🔵 Unpatched</span>
+          <span className="legend-hint">— Click files in sidebar to view code</span>
+        </div>
+
         <div className="graph-canvas" ref={graphPane}>
           <ForceGraph2D
             graphData={fg}
@@ -274,7 +300,7 @@ export default function App() {
                   "log-line"
                 }
               >
-                {line}
+                {highlightLog(line)}
               </div>
             ))
           )}

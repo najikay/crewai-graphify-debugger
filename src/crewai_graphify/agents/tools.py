@@ -15,6 +15,7 @@ __all__ = ["apply_patch", "read_code_slice", "read_vault_document"]
 _VAULT = Path("workspace/vault")
 _TARGET = Path("workspace/target")
 _MAX_READS = 5
+_MIN_PATCH_LEN = 4  # min non-space chars in original_code — blocks trivial/no-op patches
 
 
 class _ReadCounter:
@@ -36,6 +37,25 @@ class _ReadCounter:
 
 
 _read_counter = _ReadCounter()
+
+
+def _resolve_target_path(file_path: str) -> Path:
+    """Locate ``file_path`` inside _TARGET; glob-fallback on filename if not found.
+
+    If the exact path ``_TARGET / file_path`` exists it is returned immediately.
+    Otherwise searches ``_TARGET`` recursively for a file whose *name* matches
+    the basename of ``file_path``.  This handles agents that pass a partial path
+    (e.g. ``broken-python/polygons.py``) when the real location is a sub-folder
+    (``broken-python/polygons/polygons.py``).  Returns the unique match when
+    exactly one file matches; returns the original unresolved path otherwise so
+    callers receive a consistent ``path.exists() == False`` signal.
+    """
+    exact = _TARGET / file_path
+    if exact.exists():
+        return exact
+    name = Path(file_path).name
+    matches = [p for p in _TARGET.rglob(name) if p.is_file()]
+    return matches[0] if len(matches) == 1 else exact
 
 
 @tool("read_vault_document")
@@ -72,7 +92,7 @@ def read_code_slice(file_path: str, start_line: int, end_line: int) -> str:
         return f"[ERROR] Read cap reached ({_MAX_READS} reads maximum per run)."
     if start_line < 1 or end_line < start_line:
         return "[ERROR] start_line must be ≥ 1 and ≤ end_line."
-    path = _TARGET / file_path
+    path = _resolve_target_path(file_path)
     if not path.exists():
         return f"[ERROR] Source file not found: {file_path}"
     lines = path.read_text(encoding="utf-8").splitlines()
@@ -94,13 +114,21 @@ def apply_patch(file_path: str, original_code: str, new_code: str) -> str:
       "original_code" : string — the exact verbatim snippet to replace
       "new_code"      : string — the replacement code
     Example: {"file_path": "broken-python/f.py", "original_code": "x=1", "new_code": "x=2"}
+    Rejects no-op patches (original_code == new_code) and trivially short targets.
     Returns an error string if the file does not exist or the snippet is not found.
     """
     target_abs = os.path.abspath(str(_TARGET))
     resolved = os.path.abspath(str(_TARGET / file_path))
     if not resolved.startswith(target_abs + os.sep):
         raise ValueError("Path outside target directory")
-    path = _TARGET / file_path
+    if original_code == new_code:
+        return "[ERROR] Trivial patch rejected: original_code is identical to new_code."
+    if len(original_code.strip()) < _MIN_PATCH_LEN:
+        return (
+            f"[ERROR] Trivial patch rejected: original_code has < {_MIN_PATCH_LEN} "
+            "non-space chars — provide a real, specific snippet to replace."
+        )
+    path = _resolve_target_path(file_path)
     if not path.exists():
         return f"[ERROR] Target file not found: {file_path}"
     source = path.read_text(encoding="utf-8")

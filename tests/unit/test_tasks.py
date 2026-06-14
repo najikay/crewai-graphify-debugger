@@ -50,6 +50,12 @@ class TestReasonerTask:
             result = reasoner_task(MagicMock(), MagicMock())
             assert result is mock_task.return_value
 
+    def test_description_requires_target_file_key(self) -> None:
+        """Reasoner output schema must demand an explicit target_file field."""
+        with patch("crewai_graphify.agents.tasks.Task") as mock_task:
+            reasoner_task(MagicMock(), MagicMock())
+            assert "target_file" in mock_task.call_args.kwargs["description"]
+
 
 class TestNavigatorTask:
     def test_returns_task_instance(self) -> None:
@@ -60,12 +66,12 @@ class TestNavigatorTask:
     def test_description_forbids_guessing(self) -> None:
         with patch("crewai_graphify.agents.tasks.Task") as mock_task:
             navigator_task(MagicMock())
-            assert "STRICTLY FORBIDDEN" in mock_task.call_args.kwargs["description"]
+            assert "DO NOT invent" in mock_task.call_args.kwargs["description"]
 
-    def test_description_mandates_tool_call(self) -> None:
+    def test_description_contains_hot_md_template(self) -> None:
         with patch("crewai_graphify.agents.tasks.Task") as mock_task:
             navigator_task(MagicMock())
-            assert "read_vault_document" in mock_task.call_args.kwargs["description"]
+            assert "{hot_md_content}" in mock_task.call_args.kwargs["description"]
 
 
 class TestPatcherTask:
@@ -73,3 +79,22 @@ class TestPatcherTask:
         with patch("crewai_graphify.agents.tasks.Task") as mock_task:
             result = patcher_task(MagicMock(), MagicMock())
             assert result is mock_task.return_value
+
+    def test_context_limited_to_reasoner_only(self) -> None:
+        """Patcher context must contain exactly the reasoner task (no history leak)."""
+        with patch("crewai_graphify.agents.tasks.Task") as mock_task:
+            reason = MagicMock()
+            patcher_task(MagicMock(), reason)
+            assert mock_task.call_args.kwargs["context"] == [reason]
+
+    def test_description_uses_target_file(self) -> None:
+        """Patcher must take the path from the Hypothesis target_file field."""
+        with patch("crewai_graphify.agents.tasks.Task") as mock_task:
+            patcher_task(MagicMock(), MagicMock())
+            assert "target_file" in mock_task.call_args.kwargs["description"]
+
+    def test_description_forbids_guessing_paths(self) -> None:
+        """Patcher must be explicitly forbidden from inventing/guessing paths."""
+        with patch("crewai_graphify.agents.tasks.Task") as mock_task:
+            patcher_task(MagicMock(), MagicMock())
+            assert "STRICTLY FORBIDDEN" in mock_task.call_args.kwargs["description"]

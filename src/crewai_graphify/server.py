@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
+import crewai_graphify.shared.env  # noqa: F401  — load_dotenv() side effect on import
 from crewai_graphify.agents.pipeline import build_crew
 from crewai_graphify.main import _AnthropicClient, _save_efficiency_report, _save_root_cause
 from crewai_graphify.shared.archiver import archive_run
@@ -68,9 +69,9 @@ def _run_pipeline(loop: asyncio.AbstractEventLoop) -> None:
         retry_hint = ""
         result: Any = ""
         for _attempt in range(3):
-            crew = build_crew(retry_hint=retry_hint)
+            crew, inputs = build_crew(retry_hint=retry_hint)
             with redirect_stdout(_StdoutToQueue(loop, _SSE_QUEUE, sys.stdout)):
-                result = crew.kickoff()
+                result = crew.kickoff(inputs=inputs)
             if _SKIP not in str(result):
                 break
             retry_hint = _RETRY_HINT
@@ -120,11 +121,16 @@ async def reset_workspace() -> dict[str, str]:
 
 @app.get("/api/file")
 async def get_file(path: str) -> PlainTextResponse:
-    """Serve files from workspace/target/ or workspace/results/ (traversal-safe)."""
+    """Serve files from workspace/target/ or workspace/results/ (traversal-safe).
+
+    Accepts both relative paths (joined with the base dir) and absolute paths
+    (resolved directly then checked to be inside an allowed base dir).
+    """
+    p = Path(path)
     for base in (_TARGET, _RESULTS):
-        fp = (base / path).resolve()
-        if fp.is_relative_to(base.resolve()) and fp.exists():
-            return PlainTextResponse(fp.read_text(encoding="utf-8"))
+        candidate = (p if p.is_absolute() else base / p).resolve()
+        if candidate.is_relative_to(base.resolve()) and candidate.exists():
+            return PlainTextResponse(candidate.read_text(encoding="utf-8"))
     raise HTTPException(status_code=404, detail=f"{path} not found.")
 
 

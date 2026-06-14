@@ -79,22 +79,30 @@ class ObsidianManager:
     def save_hot_md(self, graph: Graph) -> Path:
         """Generate and write ``{vault_dir}/hot.md``.
 
-        Sections produced:
-        - Top hot nodes ranked by degree centrality.
-        - Bug call chain traced from ``__main__``.
-        - Known bug sites table (populated from target analysis).
+        Sections: primary target file (highest in-degree node), top hot nodes,
+        bug call chain, and all non-module nodes inside the primary file.
+        No hardcoded names — everything is derived from the live graph.
         """
         hot = self.compute_hot_nodes(graph)
         chain = self.trace_bug_chain(graph)
         by_id = {n.id: n for n in graph.nodes}
 
+        # Identify primary bug target: node with most incoming edges
+        in_deg: dict[str, int] = {}
+        for e in graph.edges:
+            in_deg[e.target] = in_deg.get(e.target, 0) + 1
+        root_id = max(in_deg, key=lambda k: in_deg[k]) if in_deg else "__main__"
+        root_node = by_id.get(root_id)
+        primary_file = root_node.file_path if root_node else graph.file_path
+
         lines: list[str] = [
             "# hot.md — High-Centrality Nodes (Debugging Hot Path)",
             "",
-            "Seed context for the Navigator Agent. "
-            "Read these nodes first — highest structural relevance.",
+            "Seed context for the Navigator Agent. Read these nodes first.",
             "",
-            f"**Source:** `{graph.file_path}`",
+            f"**Primary Target File:** `{primary_file}`",
+            f"**Root-Cause Node:** `{root_id}`"
+            f" ({in_deg.get(root_id, 0)} incoming edges)",
             "",
             "## Top Hot Nodes (by degree centrality)",
             "",
@@ -102,10 +110,11 @@ class ObsidianManager:
         for rank, (node, score) in enumerate(hot, 1):
             lines.append(
                 f"{rank}. **[[{node.id}]]** `{node.node_type.value}`"
-                f" — centrality `{score:.3f}` (L{node.start_line}–{node.end_line})"
+                f" — centrality `{score:.3f}`"
+                f" (L{node.start_line}–{node.end_line}) `{node.file_path}`"
             )
             if node.docstring:
-                lines.append(f"   > {node.docstring[:100]}")
+                lines.append(f"   > {node.docstring[:80]}")
             lines.append("")
 
         lines += ["## Bug Call Chain", "", "```text"]
@@ -116,18 +125,17 @@ class ObsidianManager:
             lines.append(f"{prefix}{nid}{tag}")
         lines += ["```", ""]
 
-        lines += [
-            "## Known Bug Sites",
-            "",
-            "| Node | Line | Severity | Description |",
-            "|------|------|----------|-------------|",
-            "| `calc_polygon_details` | 29 | **SyntaxError** |"
-            " `new Polygon(...)` — no `new` keyword in Python; remove `new ` |",
-            "| `Polygon` | 3 | **NameError** |"
-            " `class Polygon(Object)` — `Object` undefined; use `object` |",
-            "| `draw_polygon` | 51 | **LogicError** |"
-            " `range(0, 6)` hardcoded — always draws hexagon regardless of sides |",
-        ]
+        # Dynamic candidate nodes from the primary file (sorted by line number)
+        file_nodes = sorted(
+            [n for n in graph.nodes
+             if n.file_path == primary_file and n.id != "__main__"],
+            key=lambda n: n.start_line,
+        )
+        if file_nodes:
+            lines += ["## Nodes in Primary Target File", ""]
+            for n in file_nodes:
+                lines.append(f"- `{n.id}` ({n.node_type.value}) L{n.start_line}–{n.end_line}")
+            lines.append("")
 
         out = self.vault_dir / "hot.md"
         out.write_text("\n".join(lines) + "\n", encoding="utf-8")

@@ -10,33 +10,27 @@ from __future__ import annotations
 
 from crewai import Agent, Task
 
-from crewai_graphify.agents.tools import apply_patch, read_code_slice, read_vault_document
+from crewai_graphify.agents.tools import apply_patch, read_code_slice
 
 __all__ = ["navigator_task", "patcher_task", "reader_task", "reasoner_task"]
 
 
 def navigator_task(navigator: Agent) -> Task:
-    """Task 1 — read hot.md and map the bug dependency chain."""
+    """Task 1 — analyse the injected vault report and map the bug dependency chain."""
     return Task(
         name="navigator_task",
         description=(
-            "You MUST physically call the ``read_vault_document`` tool with "
-            "filename='hot.md'. You are STRICTLY FORBIDDEN from guessing, "
-            "imagining, or predicting file names, node names, or any content. "
-            "Your output MUST contain only the actual file paths and component "
-            "names returned by the tool — nothing invented.\n"
-            "Extract and report:\n"
-            "1. The Primary Target File path (from the tool output).\n"
-            "2. The Root-Cause Node name (from the tool output).\n"
-            "3. The ordered dependency chain (hottest first, from tool output)."
+            "Analyze the following vault report to find the root cause of the bug. "
+            "DO NOT invent or guess any files. You MUST strictly use the file paths "
+            "and node names exactly as they appear in this report:\n\n{hot_md_content}"
         ),
         expected_output=(
             "A plain-text summary with: the exact target source file path, "
             "the root-cause class/function name, and an ordered dependency chain "
-            "— all sourced from the vault document, nothing invented."
+            "— all taken verbatim from the vault report above, nothing invented."
         ),
         agent=navigator,
-        tools=[read_vault_document],
+        tools=[],
     )
 
 
@@ -70,15 +64,21 @@ def reasoner_task(reasoner: Agent, read_task: Task, retry_hint: str = "") -> Tas
         description=(
             "Analyse the code slices from the Reader.  Output a JSON object "
             "with exactly these keys:\n"
+            '  "target_file"      — the EXACT file path of the buggy file,\n'
+            "                       copied verbatim from the Reader's slice\n"
+            "                       header (the one you actually diagnosed).\n"
             '  "root_cause"       — one-sentence bug description\n'
             '  "confidence_score" — float 0.0–1.0; set < 0.7 if you need\n'
             "                       more slices (signals re-read to Patcher)\n"
             '  "requested_diff"   — {"original_code": ..., "new_code": ...}\n'
+            "The ``original_code`` MUST be a real, non-trivial snippet from the "
+            "diagnosed file and MUST differ from ``new_code``.\n"
             f"Output raw JSON only — no markdown fences or preamble.{hint}"
         ),
         expected_output=(
-            'A raw JSON Hypothesis: {"root_cause": ..., "confidence_score": ..., '
-            '"requested_diff": {"original_code": ..., "new_code": ...}}'
+            'A raw JSON Hypothesis: {"target_file": ..., "root_cause": ..., '
+            '"confidence_score": ..., "requested_diff": {"original_code": ..., '
+            '"new_code": ...}}'
         ),
         agent=reasoner,
         context=[read_task],
@@ -87,17 +87,29 @@ def reasoner_task(reasoner: Agent, read_task: Task, retry_hint: str = "") -> Tas
 
 
 def patcher_task(patcher: Agent, reason_task: Task) -> Task:
-    """Task 4 — apply the diff if confidence >= 0.7, else skip."""
+    """Task 4 — apply the diff if confidence >= 0.7, else skip.
+
+    Context is restricted to ``reason_task`` ONLY so the Patcher cannot pick up
+    stray filenames from earlier tasks in the run history.
+    """
     return Task(
         name="patcher_task",
         description=(
-            "Parse the Hypothesis JSON from the Reasoner.  "
-            "If ``confidence_score >= 0.7``, call ``apply_patch`` with the "
-            "``file_path`` inferred from context, ``original_code``, and "
-            "``new_code`` from ``requested_diff``.  "
-            "If ``confidence_score < 0.7``, output exactly:\n"
-            "``SKIPPED: confidence too low (<0.7) — re-read required``"
-            " and take no further action."
+            "Your ONLY input is the Reasoner's Hypothesis JSON in your context. "
+            "Parse it and act strictly on its fields:\n"
+            "1. Read ``confidence_score``. If it is < 0.7, output EXACTLY:\n"
+            "   ``SKIPPED: confidence too low (<0.7) — re-read required``\n"
+            "   and take NO further action.\n"
+            "2. If it is >= 0.7, call ``apply_patch`` with:\n"
+            "   - ``file_path``  = the Hypothesis ``target_file`` value, copied\n"
+            "                      EXACTLY as written. You are STRICTLY FORBIDDEN\n"
+            "                      from guessing a path, inventing a filename, or\n"
+            "                      targeting any other file you saw earlier in the\n"
+            "                      run. If ``target_file`` is missing, output the\n"
+            "                      SKIPPED line above.\n"
+            "   - ``original_code`` and ``new_code`` = verbatim from\n"
+            "                      ``requested_diff``. They MUST differ; never\n"
+            "                      submit a no-op patch (e.g. 'print' -> 'print')."
         ),
         expected_output=(
             "Either 'Patch applied to <file>: replaced N chars.' on success, or "

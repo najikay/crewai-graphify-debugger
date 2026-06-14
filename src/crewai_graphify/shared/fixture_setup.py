@@ -44,10 +44,15 @@ def _download_fixture(push_log: Callable[[str], None]) -> None:
 def _reset_workspace(push_log: Callable[[str], None]) -> None:
     """Wipe workspace/target/ and copy a fresh clone from the pristine fixture."""
     push_log("INFO: Resetting workspace/target/ from pristine fixture…")
-    shutil.rmtree(_TARGET_DIR, ignore_errors=True)
+    if _TARGET_DIR.exists():
+        for item in _TARGET_DIR.iterdir():
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
     _TARGET_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copytree(_FIXTURE_DIR, _TARGET_DIR / "broken-python")
-    push_log("INFO: workspace/target/ reset — run starts from pristine buggy state.")
+    push_log("INFO: workspace/target/ reset — only broken-python files present.")
 
 
 def _rebuild_vault_graph(push_log: Callable[[str], None]) -> None:

@@ -80,6 +80,40 @@ class TestArchiveRun:
         summary = next(results.rglob("run_summary.txt")).read_text(encoding="utf-8")
         assert "agent said this" in summary
 
+    def test_run_summary_contains_unified_diff(self, tmp_path: Path) -> None:
+        logs: list[str] = []
+        target, fixture, results = _make_workspace(
+            tmp_path, fixture_content="x = 1", target_content="x = 99"
+        )
+        with (
+            patch(f"{_MOD}._TARGET", target),
+            patch(f"{_MOD}._FIXTURE", fixture),
+            patch(f"{_MOD}._RESULTS", results),
+        ):
+            archive_run("output", logs.append)
+        summary = next(results.rglob("run_summary.txt")).read_text(encoding="utf-8")
+        assert "Unified Diff" in summary
+        assert "-x = 1" in summary
+        assert "+x = 99" in summary
+
+    def test_newline_only_change_archives_with_empty_diff_block(self, tmp_path: Path) -> None:
+        """A byte-different but line-identical file (trailing newline) still archives.
+
+        Exercises the empty-unified-diff branch: filecmp reports a change but
+        difflib yields no +/- lines, so that file's diff block is skipped.
+        """
+        logs: list[str] = []
+        target, fixture, results = _make_workspace(
+            tmp_path, fixture_content="x = 1\n", target_content="x = 1"
+        )
+        with (
+            patch(f"{_MOD}._TARGET", target),
+            patch(f"{_MOD}._FIXTURE", fixture),
+            patch(f"{_MOD}._RESULTS", results),
+        ):
+            archive_run("output", logs.append)
+        assert any("VALIDATION PASSED" in m for m in logs)
+
     def test_validation_passed_pushed_on_success(self, tmp_path: Path) -> None:
         logs: list[str] = []
         target, fixture, results = _make_workspace(tmp_path, target_content="changed")

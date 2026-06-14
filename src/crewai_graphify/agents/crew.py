@@ -1,34 +1,59 @@
 """CrewAI agent definitions for the graph-guided debugging pipeline.
 
-Each agent uses ``ClaudeClient`` as its LLM so every call is routed through
-``ApiGatekeeper`` for telemetry.  Agents are created via factory functions so
-callers can instantiate fresh agents per run without sharing state.
+Each agent uses ``_make_llm()`` which reads ``LLM_PROVIDER`` / ``DEFAULT_MODEL``
+from the environment so the backend can be swapped (Claude ↔ DeepSeek) without
+touching source code.  Agents are created via factory functions so callers can
+instantiate fresh agents per run without sharing state.
 """
 from __future__ import annotations
 
-from crewai import Agent
+import os
+from typing import Any
 
-from crewai_graphify.agents.tools import apply_patch, read_code_slice, read_vault_document
+from crewai import LLM, Agent
+
+from crewai_graphify.agents.tools import apply_patch, read_code_slice
 from crewai_graphify.sdk.claude_client import ClaudeClient
 
 __all__ = ["navigator_agent", "patcher_agent", "reader_agent", "reasoner_agent"]
 
 
+def _make_llm() -> Any:
+    """Return the LLM selected by ``LLM_PROVIDER`` env var (default: ``claude``).
+
+    Supported providers
+    -------------------
+    ``claude``   — uses ``ClaudeClient`` (routes through ``ApiGatekeeper``)
+    ``deepseek`` — uses ``crewai.LLM`` with the DeepSeek OpenAI-compatible API;
+                   reads ``DEFAULT_MODEL`` (default ``deepseek-chat``) and
+                   ``DEEPSEEK_API_KEY`` from the environment.
+    """
+    provider = os.getenv("LLM_PROVIDER", "claude").lower()
+    if provider == "deepseek":
+        model = os.getenv("DEFAULT_MODEL", "deepseek-chat")
+        return LLM(
+            model=f"deepseek/{model}",
+            api_key=os.getenv("DEEPSEEK_API_KEY", ""),
+        )
+    return ClaudeClient()
+
+
 def navigator_agent() -> Agent:
-    """Return a Navigator agent that reads vault documents to map the bug."""
+    """Return a Navigator agent that analyses the injected vault report."""
     return Agent(
         role="Graph Navigator",
         goal=(
-            "Read the vault's hot-node document to identify the buggy file, "
-            "the affected class or function, and the full dependency chain."
+            "Analyze the vault report already provided in your task to identify "
+            "the buggy file, the affected class or function, and the full "
+            "dependency chain — using only the data given, never inventing names."
         ),
         backstory=(
             "You are an expert at reading code-dependency graphs represented "
             "as Obsidian markdown.  You extract structured information about "
             "which nodes are hottest and trace the call chain to the root cause."
         ),
-        llm=ClaudeClient(),
-        tools=[read_vault_document],
+        llm=_make_llm(),
+        tools=[],
         verbose=False,
         allow_delegation=False,
     )
@@ -48,7 +73,7 @@ def reader_agent() -> Agent:
             "range you fetch exactly those lines and nothing more, so the "
             "Reasoner receives focused, high-signal input."
         ),
-        llm=ClaudeClient(),
+        llm=_make_llm(),
         tools=[read_code_slice],
         verbose=False,
         allow_delegation=False,
@@ -70,7 +95,7 @@ def reasoner_agent() -> Agent:
             "synthesised from the dependency graph and identify the exact "
             "logical error, its location, and the minimal change required."
         ),
-        llm=ClaudeClient(),
+        llm=_make_llm(),
         tools=[],
         verbose=False,
         allow_delegation=False,
@@ -90,7 +115,7 @@ def patcher_agent() -> Agent:
             "and use apply_patch to replace original_code with new_code in "
             "the target file — only when confidence is sufficient."
         ),
-        llm=ClaudeClient(),
+        llm=_make_llm(),
         tools=[apply_patch],
         verbose=False,
         allow_delegation=False,

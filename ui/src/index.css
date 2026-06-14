@@ -146,6 +146,26 @@ body {
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Terminal keyword highlights ──────────────────────────────── */
+.kw-agent { color: #79c0ff; font-weight: 700; }
+.kw-task  { color: #d2a8ff; font-weight: 700; }
+.kw-final { color: #3fb950; font-weight: 700; }
+
+/* ── Graph legend bar ─────────────────────────────────────────── */
+.graph-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.2rem 1rem;
+  font-size: 10px;
+  color: #8b949e;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  flex-shrink: 0;
+}
+.legend-sep  { color: #30363d; }
+.legend-hint { color: #484f58; margin-left: 0.25rem; }
+
 /* ── Clickable file items ─────────────────────────────────────── */
 .file-tree .i3 { padding-left: 3rem; }
 .file-item {

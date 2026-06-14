@@ -1,7 +1,7 @@
 # TODO: Granular Task Execution Checklist
 
-**Version:** 1.3.0  
-**Status:** Phases 1–6 Complete · Phase 7 Batch 2 Complete  
+**Version:** 1.5.0  
+**Status:** Phases 1–6 Complete · Phase 7 Batches 1–5 Complete  
 **Owner:** Senior Software Architect  
 **Last Updated:** 2026-06-14
 
@@ -233,8 +233,8 @@
 - [X] **4.1.1** `NavigatorAgent` defined as a CrewAI `Agent` with role, goal, backstory.  
   → verify: `agents/crew.py::navigator_agent()` — mypy passes; file ≤ 150 lines. ✓
 
-- [X] **4.1.2** Navigator reads `hot.md` via the `read_vault_document` tool to identify hot nodes.  
-  → verify: `agents/tasks.py::navigator_task` instructs Navigator to call `read_vault_document("hot.md")`. ✓
+- [~] **4.1.2** Navigator receives `hot.md` content to identify hot nodes.  
+  → verify: `pipeline.py::build_crew()` reads `workspace/vault/hot.md` and passes the raw text via `crew.kickoff(inputs={"hot_md_content": ...})`; `navigator_task` description uses `{hot_md_content}` template. Tool-based approach replaced by force-fed context to eliminate LLM hallucinations. ✓
 
 - [~] **4.1.3** Hot-node resolution via graph traversal.  
   → verify: Navigator reads `hot.md` which already encodes centrality-ranked nodes and the bug call chain. Full BFS not needed — Obsidian Manager pre-computes the traversal at vault-build time. ✓
@@ -331,8 +331,8 @@
 
 ### 5.4 Unit Test Suite — All Quality Gates
 
-- [X] **5.4.1** Overall branch coverage ≥ 85%.  
-  → verify: `uv run pytest` → **94.77% branch coverage** (163 tests, 6 new integration). ✓
+- [X] **5.4.1** Overall branch coverage ≥ 90%.  
+  → verify: `uv run pytest` → **95.52% branch coverage** (178 tests). ✓
 
 - [X] **5.4.2** `ruff check .` exits 0.  
   → verify: 0 violations on every run throughout Phases 1–5. ✓
@@ -375,8 +375,8 @@
 - [X] **6.4.1** All 100+ TODO items checked off.  
   → verify: All Phase 1–6 items are now [X]; Phase 7 UI items remain as planned future work. ✓
 
-- [X] **6.4.2** `uv run pytest` exits 0 with ≥ 85% coverage.  
-  → verify: 163/163 passed, 94.77% branch coverage. ✓
+- [X] **6.4.2** `uv run pytest` exits 0 with ≥ 90% coverage.  
+  → verify: 178/178 passed, 95.52% branch coverage. ✓
 
 - [X] **6.4.3** `ruff check .` exits 0.  
   → verify: 0 violations. ✓
@@ -442,6 +442,69 @@
 - [X] **7.6.5** Dynamic node highlighting — `patchedFiles: Set<string>` React state accumulates file paths from `"Patch applied to <path>:"` SSE lines; `nodeColor` callback renders matched nodes in `#10b981` (green), rest in `#58a6ff` (blue); state resets at run start.
   → verify: `tsc --noEmit` 0 errors; patched nodes turn green in real time during a run. ✓
 
+- [X] **7.6.6** AST fallback node — `GraphBuilder.build()` wraps `ast.parse()` in `try/except SyntaxError`; on failure creates a single `NodeType.MODULE` node with `id="__main__"` and 0 edges so Python 2 syntax files (e.g., `print "hello"`) are never silently dropped from the graph.
+  → verify: `test_graph_builder.py::TestSanitize::test_syntax_error_creates_fallback_node` passes. ✓
+
+- [X] **7.6.7** `POST /api/reset` endpoint — wipes `workspace/target/` and re-copies the pristine fixture; returns `{"status": "ok"}`; returns 409 if a run is in progress. The `↻` button in the UI calls this endpoint instead of just reloading the graph.
+  → verify: `server.py` ≤ 150 lines; endpoint present; `ruff` + `mypy` pass. ✓
+
+- [X] **7.6.8** `GET /api/file?path=<rel>` endpoint — serves raw content of any file under `workspace/target/`; path-traversal protected via `fp.is_relative_to(_TARGET.resolve())`.
+  → verify: `server.py` ≤ 150 lines; 403 returned on directory traversal attempts. ✓
+
+- [X] **7.6.9** Code viewer overlay in UI — clicking a file name in the left sidebar sends `GET /api/file?path=<path>`, opens a modal overlay with the raw source. Overlay closes on backdrop click or ✕ button.
+  → verify: `tsc --noEmit` 0 errors; CSS classes `.viewer-overlay`, `.viewer-panel`, `.viewer-content` defined. ✓
+
+- [X] **7.6.10** `_fixture_is_valid()` helper — `ensure_fixture` now checks `_FIXTURE_DIR.exists() and any(_FIXTURE_DIR.iterdir())` before downloading; guards against a partially-extracted directory triggering a re-download skip.
+  → verify: `fixture_setup.py` ≤ 150 lines; `ruff` passes. ✓
+
+- [X] **7.6.11** Coverage `fail_under` raised from 85 → 90; `fixture_setup.py` and `sse_log.py` added to coverage omit (server-lifecycle files not unit-testable without integration setup).
+  → verify: `uv run pytest` → 95.52% ≥ 90% threshold; fixtures excluded. ✓
+
+### 7.7 Cyclic Re-Read Loop & UX Polish (Phase 7 Batch 3 — Complete)
+
+- [X] **7.7.1** Cyclic re-read retry loop — `_run_pipeline` in `server.py` wraps `crew.kickoff()` in a `for _attempt in range(3)` loop. If the output contains `"SKIPPED"` (confidence < 0.7), the loop sets `retry_hint = _RETRY_HINT` and rebuilds the crew via `build_crew(retry_hint=...)` for the next attempt. Breaks immediately on a non-SKIPPED result. Pushes `INFO: Attempt N/3 skipped…` to the SSE terminal on each retry.
+  → verify: `server.py` 139 lines ≤ 150; `ruff` passes; retry loop visible in `_run_pipeline`. ✓
+
+- [X] **7.7.2** `retry_hint` parameter in `reader_task` and `reasoner_task` — when non-empty, appended after `"\n\n"` to the task description so the agent sees the expanded-range instruction on the retry iteration. `build_crew(retry_hint="")` default preserves first-run behaviour.
+  → verify: `test_tasks.py` (9 tests) — all passing; `test_pipeline.py::test_retry_hint_forwarded_to_reader_and_reasoner` passes. ✓
+
+- [X] **7.7.3** Terminal keyword highlighting — `highlightLog()` function in `App.tsx` splits each SSE log line on `/(\[Agent\]|Task:|Final Answer:)/` and wraps matches in `<span>` tags with `.kw-agent` (blue), `.kw-task` (purple), or `.kw-final` (green) CSS classes. Makes long CrewAI output scannable at a glance.
+  → verify: `tsc --noEmit` 0 errors; CSS classes defined in `index.css`. ✓
+
+- [X] **7.7.4** Graph legend — a `.graph-legend` bar between the topbar and the graph canvas displays: `🟢 Patched | 🔵 Unpatched — Click files in sidebar to view code`.
+  → verify: `tsc --noEmit` 0 errors; renders above `<ForceGraph2D>`. ✓
+
+### 7.8 Platform Migration & Robustness (Batch 4 — Complete)
+
+- [X] **7.8.1** Multi-Provider LLM Factory — `_make_llm()` in `agents/crew.py` reads `LLM_PROVIDER` and `DEFAULT_MODEL` from the environment. Routes to `crewai.LLM(model="deepseek/<model>")` when `LLM_PROVIDER=deepseek`; falls back to `ClaudeClient()` for all other values. `DEEPSEEK_API_KEY` loaded from env. No source changes needed to switch providers.  
+  → verify: `test_crew.py` (5 tests) — all branches covered; `ruff check` 0 violations; `check_line_limits.py` passes. ✓
+
+- [X] **7.8.2** Force-Fed Navigator Context — `pipeline.py::build_crew()` reads `workspace/vault/hot.md` once at startup and injects the raw text into the navigator task via `crew.kickoff(inputs={"hot_md_content": ...})`. Navigator agent `tools=[]` (no tool calls). Eliminates LLM hallucination of fake file paths.  
+  → verify: `test_pipeline.py` — `test_hot_md_content_read_when_file_exists` and `test_hot_md_content_empty_when_file_missing` pass; `navigator_task` description contains `{hot_md_content}` template. ✓
+
+- [X] **7.8.3** Tool Path Resolution Glob Fallback — `_resolve_target_path()` in `agents/tools.py` searches `workspace/target/` recursively by filename when the exact relative path doesn't exist on disk. Handles agent path-syntax mismatches (e.g. `broken-python/polygons.py` → `broken-python/polygons/polygons.py`). Returns original path (→ file-not-found error) when 0 or multiple files match.  
+  → verify: `test_tools.py::test_glob_fallback_finds_unique_file_by_name`, `test_glob_fallback_multiple_matches_returns_not_found`, `test_glob_fallback_patches_file_by_name` pass; 100% branch coverage on `tools.py`. ✓
+
+- [X] **7.8.4** Post-Run Disk Archiver — `shared/archiver.py::archive_run()` compares `workspace/target/broken-python/` against `fixtures/original_buggy/` via `filecmp.cmp`. Pushes ❌ VALIDATION FAILED SSE if no files changed; on success copies run to `workspace/results/run_<YYYYMMDD_HHMMSS>/` with `run_summary.txt`. Called from `server.py` after non-SKIPPED crew result.  
+  → verify: `test_archiver.py` (9 tests) — 100% branch coverage on `archiver.py`; `ruff check` passes. ✓
+
+### 7.9 Context Isolation, Patch Integrity & Env Wiring (Batch 5 — Complete)
+
+- [X] **7.9.1** Reasoner emits explicit `target_file` — `reasoner_task` JSON schema now requires a `target_file` key copied verbatim from the Reader's slice header, plus an instruction that `original_code` must be non-trivial and differ from `new_code`. Removes the Patcher's need to "infer" a path from history.  
+  → verify: `test_tasks.py::TestReasonerTask::test_description_requires_target_file_key` passes. ✓
+
+- [X] **7.9.2** Patcher context isolation — `patcher_task` keeps `context=[reason_task]` (reasoner output ONLY) and the description now forces the Patcher to use the Hypothesis `target_file` value as `file_path`, copied exactly. It is STRICTLY FORBIDDEN from guessing a path, inventing a filename, or targeting any other file seen earlier in the run; missing `target_file` ⇒ emit the SKIPPED line. Fixes the cross-file leak where the Patcher brute-forced `polygons.py` while the Reasoner diagnosed `mathsquiz-step3.py`.  
+  → verify: `test_tasks.py::TestPatcherTask` — `test_context_limited_to_reasoner_only`, `test_description_uses_target_file`, `test_description_forbids_guessing_paths` pass. ✓
+
+- [X] **7.9.3** Trivial-patch guard in `apply_patch` — `tools.py` rejects no-op patches where `original_code == new_code`, and rejects targets whose stripped length is `< _MIN_PATCH_LEN` (4 non-space chars). Blocks the "replace `print` with `print`" exploit that bypassed the disk-change validator.  
+  → verify: `test_tools.py::TestApplyPatch` — `test_identical_code_rejected_as_trivial`, `test_too_short_target_rejected_as_trivial` pass; `tools.py` 100% branch coverage. ✓
+
+- [X] **7.9.4** Archiver unified diff — `archiver.py::_unified_diff()` writes a `difflib.unified_diff` of every changed file vs its pristine fixture into `run_summary.txt` (alongside the file list and agent final answer); `_detect_changes()` now iterates files in sorted order for deterministic output.  
+  → verify: `test_archiver.py::test_run_summary_contains_unified_diff` passes; `archiver.py` 100% branch coverage. ✓
+
+- [X] **7.9.5** `.env` toggle wired into backend — `shared/env.py` calls `dotenv.load_dotenv()` on import; `server.py` imports it first so `LLM_PROVIDER` / `DEFAULT_MODEL` / `*_API_KEY` reach `_make_llm()` before any agent is built. `python-dotenv` declared in `[dependencies]`; `env.py` added to coverage omit (side-effect entry module).  
+  → verify: `ruff check` 0 violations; `check_line_limits.py` passes; `.env` with `LLM_PROVIDER=deepseek` now selects DeepSeek at runtime. ✓
+
 ### 7.1 Interactive Graph Panel
 
 - [ ] **7.1.1** Hot-node colouring — nodes listed in Navigator output painted red; all others grey.
@@ -451,11 +514,12 @@
 ### 7.2 File Explorer Panel
 
 - [ ] **7.2.1** Dynamic tree from `GET /api/files` (backend endpoint not yet implemented).
-- [ ] **7.2.2** Click a file to preview its content in a code viewer panel.
+- [X] **7.2.2** Click a file to preview its content in a code viewer panel.
+  → verify: Five broken-python source files listed as clickable `<li>` items; clicking calls `GET /api/file?path=...` and renders content in `.viewer-overlay` modal. ✓
 
 ### 7.3 Live Agent Terminal
 
-- [ ] **7.3.1** ANSI-colour differentiation per agent (`[Navigator]` cyan / `[Reader]` yellow / `[Reasoner]` magenta).
+- [~] **7.3.1** Keyword highlighting — `[Agent]`, `Task:`, `Final Answer:` highlighted in distinct colours via inline `<span>` tags. Full per-agent ANSI-colour differentiation deferred.
 - [ ] **7.3.2** "Run complete" banner on `event: done`.
 
 ### 7.4 Report Panels (post-run)
