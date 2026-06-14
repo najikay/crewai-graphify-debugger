@@ -562,3 +562,35 @@ without it, a no-op patch could leave a byte unchanged and silently "pass".
 4. **`AgentTerminal`** — live streaming via SSE
 5. **`RootCauseCard` + `EfficiencyChart`** — report panels (post-run)
 6. **Integration** — hot-node click → file highlight cross-panel event
+
+---
+
+## 10. סיום שלב ה-Backend ו-Technical Debt (עברית)
+
+> סעיף זה נכתב בעברית עם שילוב מונחי technical באנגלית, בהתאם להנחיית התיעוד של הפרויקט.
+
+### 10.1 סטטוס — Backend Orchestration הושלם
+
+שלב ה-**Backend Orchestration** הסתיים במלואו. לולאת ה-4 agents
+(Navigator → Reader → Reasoner → Patcher) הוכחה בהרצה חיה (live run) מקצה-לקצה
+מול ה-fixture של `broken-python`, כולל בחירת provider דינמית דרך `.env`
+(ה-**Multi-Provider LLM Factory**), הזנת `hot.md` ישירות ל-Navigator,
+ה-**glob-fallback** ב-`apply_patch`, ושער ה-validation של ה-**Post-Run Archiver**.
+
+מכאן ואילך הפיתוח עובר ל-**Frontend / UI** — בניית ה-Command Center
+(Graph Viewer, Live Terminal, Code Inspector) מעל ה-API הקיים.
+
+### 10.2 Technical Debt — DeepSeek עוקף את ה-ApiGatekeeper
+
+**תיאור החוב:** מכיוון ש-DeepSeek מנותב ישירות דרך `crewai.LLM` (litellm),
+הוא כרגע **עוקף (bypasses)** את ה-`ApiGatekeeper`. כתוצאה מכך, מעקב ה-**Budget**
+וה-**telemetry** עבור הרצות DeepSeek **נדחה (deferred)** לעדכון עתידי.
+
+- **מה כן עובד:** הנתיב של Claude (`ClaudeClient`) ממשיך לעבור במלואו דרך
+  ה-`ApiGatekeeper`, ולכן אכיפת התקציב (budget enforcement), ה-rate-limiting
+  וה-`SessionLedger` תקפים עבורו.
+- **מה לא עובד:** הרצות DeepSeek אינן נספרות ב-`BudgetTracker`, אינן נאכפות
+  מול תקרת ה-budget, ואינן מתועדות ב-Session Ledger.
+- **כיוון פתרון עתידי:** עטיפת ה-provider של DeepSeek ב-adapter שמיישם את אותו
+  `_ClientProtocol` כמו `_AnthropicClient`, כך שכל הקריאות ינותבו דרך
+  ה-`ApiGatekeeper` ללא תלות ב-provider.

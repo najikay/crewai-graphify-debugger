@@ -1,7 +1,7 @@
 # TODO: Granular Task Execution Checklist
 
-**Version:** 1.5.0  
-**Status:** Phases 1–6 Complete · Phase 7 Batches 1–5 Complete  
+**Version:** 1.6.0  
+**Status:** Phases 1–7 Complete (Backend Orchestration ✅) · Phase 8 (UI) In Progress  
 **Owner:** Senior Software Architect  
 **Last Updated:** 2026-06-14
 
@@ -531,3 +531,53 @@
 
 - [ ] **7.5.1** `npm run build` produces a static bundle served by FastAPI (`StaticFiles`).
 - [ ] **7.5.2** GitHub Actions job `ui-typecheck` runs `tsc --noEmit`.
+
+---
+
+## שלב 8: מעבר מ-Backend ל-Frontend / UI Development
+
+**גרסה:** 1.6.0  
+**סטטוס:** Backend Orchestration הושלם במלואו ✅ · שלב ה-UI Command Center החל  
+**עודכן לאחרונה:** 2026-06-14
+
+> הערה: כל התוספות בשלב זה נכתבות בעברית עם שילוב טבעי של מונחי ה-technical הרלוונטיים באנגלית, בהתאם להנחיית הפרויקט.
+
+### 8.0 סגירת שלב ה-Backend Orchestration
+
+- [X] **8.0.1** לולאת ה-Backend Orchestration הוכחה מקצה-לקצה (end-to-end) בהרצה חיה (live run) מול ה-fixture של `broken-python`, דרך provider מסוג DeepSeek.  
+  → אימות: ה-Reasoner אבחן את `polygons/polygons.py` ופלט `target_file` מפורש; ה-Patcher כתב לאותו קובץ בלבד (ללא context leak ל-`mathsquiz`); שער ה-validation זיהה diff פיזי אמיתי ושמר ל-`workspace/results/run_20260614_194406/`. ✓
+
+- [X] **8.0.2** כל מנגנוני ה-core של ה-Backend הושלמו ותועדו: **Multi-Provider LLM Factory**, **Post-Run Archiver**, **glob-fallback** ב-`apply_patch`, ו-**הזנה ישירה (force-feed)** של `hot.md` ל-Navigator Agent.  
+  → אימות: ראו PRD §4.4 (FR-15…FR-20) ו-PLAN §9. ✓
+
+- [X] **8.0.3** כל ה-quality gates ירוקים בסיום שלב ה-Backend: 213 בדיקות עוברות, branch coverage של 96.19%, מגבלת 150 שורות לקובץ נשמרת, ו-`ruff check` נקי.  
+  → אימות: `uv run pytest` → 213 passed; `check_line_limits.py` → all files OK. ✓
+
+### 8.1 Technical Debt — חוב טכני שנרשם
+
+- [ ] **8.1.1** **DeepSeek עוקף את ה-ApiGatekeeper.** מכיוון ש-DeepSeek מנותב ישירות דרך `crewai.LLM` (litellm), הוא כרגע **עוקף (bypasses)** את ה-`ApiGatekeeper`. לכן מעקב ה-**Budget** וה-**telemetry** עבור הרצות DeepSeek **נדחה (deferred)** לעדכון עתידי. הנתיב של Claude (`ClaudeClient`) ממשיך לעבור במלואו דרך ה-gatekeeper, כך שאכיפת התקציב ו-Session Ledger תקפים רק עבורו.  
+  → השפעה: הרצות DeepSeek לא נספרות ב-`BudgetTracker` ולא נאכפות מול תקרת ה-budget. פתרון עתידי: עטיפת ה-provider של DeepSeek ב-adapter שמנתב דרך ה-`ApiGatekeeper`.
+
+### 8.2 רכיבי ה-UI Command Center
+
+- [X] **8.2.1** **Graph Viewer** — רכיב `GraphViewer` (`ui/src/components/GraphViewer.tsx`) מבוסס `react-force-graph-2d`, מציג את ה-nodes וה-edges שנמשכו מ-`/api/graph`. לחיצה על node מפעילה את ה-Code Inspector עם הקובץ המתאים; nodes של קבצים שעברו patch נצבעים בירוק.  
+  → אימות: `tsc -b` עובר; `GraphViewer` מקבל `data`, `patchedFiles`, `onNodeClick` כ-props.
+
+- [X] **8.2.2** **Live Terminal** — רכיב `LiveTerminal` (`ui/src/components/LiveTerminal.tsx`) מציג את לוגי הסוכנים שמוזרמים מ-SSE (`/api/stream`), עם הדגשת keywords (`[Agent]`, `Task:`, `Final Answer:`) וצביעה לפי רמת הלוג (INFO/WARNING/ERROR).  
+  → אימות: לוגיקת ה-parsing וה-classification מופרדת ל-`lib/format.ts` ומכוסה ב-`vitest`.
+
+- [X] **8.2.3** **Code Inspector** — רכיב `CodeInspector` (`ui/src/components/CodeInspector.tsx`) מושך תוכן קבצים דרך `/api/file` ומציג אותם (כולל patches שהוחלו) ב-modal overlay.  
+  → אימות: `tsc -b` עובר; ה-modal נסגר בלחיצה על הרקע או על ✕.
+
+- [X] **8.2.4** **State manager + utilities טהורים** — כל ה-state וה-handlers רוכזו ב-hook `useDebuggerSession` (`ui/src/hooks/useDebuggerSession.ts`), ו-`App.tsx` צומצם מתחת ל-150 שורות. הפונקציות הטהורות ב-`lib/format.ts` ו-`lib/graph.ts` מכוסות בבדיקות `vitest`.  
+  → אימות: `npm run test` → כל בדיקות ה-utilities עוברות; `App.tsx` ≤ 150 שורות.
+
+### 8.3 Bug Fix — צביעת nodes דינמית לפי ה-SSE stream
+
+- [X] **8.3.1** **תיקון ה-state binding של ה-Patched nodes.** ה-legend (🟢/🔵) הוצג אבל ה-nodes לא נצבעו בירוק בפועל. ה-root cause: ה-regex ב-`extractPatchedFile` היה מעוגן ל-תחילת השורה (`/^Patch applied to/`), אך ב-SSE stream האמיתי השורה מגיעה עטופה ב-box של CrewAI (verbose), למשל `│  Patch applied to ...: replaced 218 chars.  │`, ולכן ה-regex המעוגן **מעולם לא תאם** וה-`patchedFiles` נשאר ריק.  
+  → תיקון: הסרת העיגון (`^`) כך שה-regex תופס את ה-pattern גם בתוך ה-box (כולל הוריאנטים `Output:` ו-`Final Output:`), עם `trim` על ה-capture.
+
+- [X] **8.3.2** **Normalization של ה-path.** הנתיב שחולץ עובר `toApiPath` (הסרת prefix של `workspace/target/`) לפני שמירתו ב-state `patchedFiles`, וגם ה-`nodeColor` מנרמל את ה-`file_path` של ה-node — כך ש-node עם נתיב מלא (`workspace/target/broken-python/...`) תואם entry יחסי (`broken-python/...`).
+
+- [X] **8.3.3** **Binding ל-ForceGraph canvas.** ה-state `patchedFiles` מועבר כ-prop ל-`GraphViewer`, וה-`nodeColor` של ה-`ForceGraph2D` מחזיר ירוק `#22c55e` כאשר ה-node תואם קובץ שעבר patch, אחרת כחול `#3b82f6`.  
+  → אימות: `npm run test:cov` → 24 בדיקות עוברות, 100% coverage על `format.ts` ו-`graph.ts`; `eslint` ו-`tsc -b` נקיים.

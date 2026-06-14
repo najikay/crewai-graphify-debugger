@@ -165,3 +165,35 @@ BugsInPy Bug Report
 | **API Gatekeeper** | Singleton service class that wraps the Anthropic SDK, enforcing telemetry, budget, and rate-limit policies. |
 | **Kill Switch** | Hard error raised by the gatekeeper when cumulative cost hits 100% of `budget_limits.json` ceiling. |
 | **BugsInPy** | Academic benchmark of 493 real bugs from 17 Python open-source projects (Widyasari et al., 2020). |
+
+---
+
+## 8. עדכון שלב — מעבר ל-UI ו-Technical Debt (עברית)
+
+> סעיף זה נכתב בעברית עם שילוב מונחי technical באנגלית, בהתאם להנחיית התיעוד.
+
+### 8.1 השלמת שלב ה-Backend Orchestration
+
+שלב ה-**Backend Orchestration** הושלם ואומת בהרצה חיה (live run) מקצה-לקצה.
+הדרישות הפונקציונליות החדשות (FR-15…FR-20 בסעיף §4.4) מומשו במלואן:
+**Multi-Provider LLM Factory**, force-feed של `hot.md` ל-Navigator,
+**glob-fallback** ב-tools, בידוד context (context isolation) בין Reasoner ל-Patcher,
+guard נגד patch טריוויאלי, ושער validation עם **Post-Run Archiver**.
+
+הפרויקט עובר כעת לשלב ה-**Frontend / UI** — בניית ה-Command Center.
+
+### 8.2 Technical Debt רשום — DeepSeek ו-ApiGatekeeper
+
+מכיוון ש-DeepSeek מנותב ישירות דרך `crewai.LLM`, הוא **עוקף (bypasses)** את
+ה-`ApiGatekeeper`. לכן מעקב ה-**Budget** וה-**telemetry** עבור הרצות DeepSeek
+**נדחה (deferred)** לעדכון עתידי (ראו PLAN §10.2). דרישות FR-10…FR-14
+(אכיפת gatekeeper ותקציב) תקפות כיום עבור נתיב ה-Claude בלבד.
+
+### 8.3 דרישות שלב ה-UI (Command Center)
+
+| ID | דרישה |
+|---|---|
+| UI-01 | רכיב **Graph Viewer** (`react-force-graph`) ימשוך ויציג את ה-nodes וה-edges מ-`/api/graph`; לחיצה על node תפתח את ה-Code Inspector. |
+| UI-02 | רכיב **Live Terminal** יתחבר ל-SSE endpoint (`/api/stream`) ויזרים את לוגי הסוכנים בזמן אמת עם הדגשת keywords. |
+| UI-03 | רכיב **Code Inspector** ימשוך תוכן קבצים דרך `/api/file` ויציג קוד ו-patches שהוחלו. |
+| UI-04 | פונקציות ה-utility הטהורות של ה-UI (`format.ts`, `graph.ts`) יכוסו בבדיקות `vitest`. |
