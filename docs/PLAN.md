@@ -373,11 +373,18 @@ Phase 6 wraps the CLI pipeline in a browser-based **Agentic OS** — a three-pan
 
 ### 7.2 Backend — FastAPI Server (`src/crewai_graphify/server.py`)
 
+**Phase 7 Foundation (implemented):**
+
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/graph` | GET | Returns `workspace/graph.json` as JSON |
-| `/api/run` | POST | Triggers `crew.kickoff()` in a background thread |
-| `/api/stream` | GET (SSE) | Server-Sent Events stream of agent stdout lines |
+| `/api/graph` | GET | Returns `workspace/vault/graph.json` as JSON (404 if not yet built) |
+| `/api/execute` | POST 202 | Fires `crew.kickoff()` in a `ThreadPoolExecutor`; 409 if already running |
+| `/api/stream` | GET (SSE) | `text/event-stream` — yields `data: {"log": "..."}` per log line; ends with `event: done` |
+
+**Phase 7 Future (planned):**
+
+| Endpoint | Method | Description |
+|---|---|---|
 | `/api/report/root-cause` | GET | Returns `workspace/root_cause_report.json` |
 | `/api/report/efficiency` | GET | Returns `workspace/token_efficiency_report.md` as text |
 | `/api/files` | GET | Lists files under `workspace/` as a JSON tree |
@@ -406,7 +413,7 @@ ui/
 
 | Library | Purpose |
 |---|---|
-| `react-force-graph` | Force-directed D3 node/edge graph with pan, zoom, click |
+| `react-force-graph-2d` | Force-directed D3 node/edge graph with pan, zoom, click |
 | `recharts` | Bar chart for token savings comparison |
 | `xterm.js` | Terminal emulator for streaming agent output |
 | `vite` | Dev server + production bundler |

@@ -404,12 +404,49 @@
 
 ---
 
-## Phase 7: Visual Agentic OS UI _(Planned)_
+## Phase 7: Visual Agentic OS UI
 
 > See `docs/PLAN.md §7` for full architecture proposal.
 
-- [ ] **7.1** File Explorer panel — browse `workspace/` directory tree
-- [ ] **7.2** Interactive Node Graph — render `graph.json` as a live, clickable D3/React-Flow canvas
-- [ ] **7.3** Live-streaming agent execution terminal — stream `crew.kickoff()` stdout in real time
-- [ ] **7.4** Root-cause report panel — render `root_cause_report.json` as structured output
-- [ ] **7.5** Token efficiency dashboard — render `token_efficiency_report.md` as live charts
+### 7.0 Foundation (Phase 7 Batch 1 — Complete)
+
+- [X] **7.0.1** FastAPI server `src/crewai_graphify/server.py` with CORS, `GET /api/graph`, `POST /api/execute` (202, thread-pool), `GET /api/stream` (SSE).
+  → verify: `uv run ruff check src/` 0 violations · `mypy --strict src/` 0 errors · 124 lines ≤ 150. ✓
+
+- [X] **7.0.2** React + Vite scaffold in `ui/` with `react-force-graph-2d`, `lucide-react`, `axios` installed.
+  → verify: `ui/package.json` lists all three deps · `npm install` 0 vulnerabilities · `tsc --noEmit` 0 errors. ✓
+
+- [X] **7.0.3** Dark-mode 3-pane layout in `ui/src/App.tsx`: left File Explorer, center `<ForceGraph2D>` wired to `/api/graph`, right SSE Agent Terminal.
+  → verify: `tsc --noEmit` 0 errors · `index.css` defines `.os-shell`, `.sidebar-left`, `.center-pane`, `.sidebar-right`. ✓
+
+- [X] **7.0.4** Vite proxy `/api → http://localhost:8000` in `ui/vite.config.ts`.
+  → verify: proxy block present, port 5173 pinned. ✓
+
+- [X] **7.0.5** Concurrent-dev launch script `scripts/dev.sh` starts `uvicorn` + `npm run dev`.
+  → verify: script is executable, traps SIGINT, prints both URLs. ✓
+
+### 7.1 Interactive Graph Panel
+
+- [ ] **7.1.1** Hot-node colouring — nodes listed in Navigator output painted red; all others grey.
+- [ ] **7.1.2** Click-to-highlight — clicking a graph node highlights the matching file+line range in the File Explorer.
+- [ ] **7.1.3** Node tooltip showing `node_type`, `start_line`–`end_line`, and `file_path`.
+
+### 7.2 File Explorer Panel
+
+- [ ] **7.2.1** Dynamic tree from `GET /api/files` (backend endpoint not yet implemented).
+- [ ] **7.2.2** Click a file to preview its content in a code viewer panel.
+
+### 7.3 Live Agent Terminal
+
+- [ ] **7.3.1** ANSI-colour differentiation per agent (`[Navigator]` cyan / `[Reader]` yellow / `[Reasoner]` magenta).
+- [ ] **7.3.2** "Run complete" banner on `event: done`.
+
+### 7.4 Report Panels (post-run)
+
+- [ ] **7.4.1** Root-cause card from `GET /api/report/root-cause` (backend endpoint not yet implemented).
+- [ ] **7.4.2** Token efficiency bar chart from `GET /api/report/efficiency`.
+
+### 7.5 CI & Production
+
+- [ ] **7.5.1** `npm run build` produces a static bundle served by FastAPI (`StaticFiles`).
+- [ ] **7.5.2** GitHub Actions job `ui-typecheck` runs `tsc --noEmit`.
