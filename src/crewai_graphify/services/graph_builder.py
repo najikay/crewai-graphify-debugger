@@ -63,13 +63,16 @@ class GraphBuilder:
         source = target_file.read_text(encoding="utf-8")
         for old, replacement in _SANITIZE:
             source = source.replace(old, replacement)
-        tree = ast.parse(source, filename=str(target_file))
-        nodes = self._collect_nodes(tree, target_file)
-        return Graph(
-            file_path=str(target_file),
-            nodes=nodes,
-            edges=self._collect_edges(tree, nodes),
-        )
+        fp = str(target_file)
+        try:
+            tree = ast.parse(source, filename=fp)
+            nodes = self._collect_nodes(tree, target_file)
+            edges = self._collect_edges(tree, nodes)
+        except SyntaxError:
+            nodes = [Node(id="__main__", name="__main__", node_type=NodeType.MODULE,
+                          file_path=fp, start_line=1, end_line=source.count("\n") + 1)]
+            edges: list[Edge] = []
+        return Graph(file_path=fp, nodes=nodes, edges=edges)
 
     def save_graph(self, graph: Graph) -> Path:
         """Serialise *graph* as ``{vault_dir}/graph.json``."""

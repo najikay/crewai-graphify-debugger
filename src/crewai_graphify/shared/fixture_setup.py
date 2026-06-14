@@ -61,10 +61,7 @@ def _rebuild_vault_graph(push_log: Callable[[str], None]) -> None:
     seen: dict[str, Node] = {}
     all_edges: list[Edge] = []
     for py_file in sorted(_TARGET_DIR.rglob("*.py")):
-        try:
-            g = builder.build(py_file)
-        except SyntaxError:
-            continue
+        g = builder.build(py_file)
         for n in g.nodes:
             seen[n.id] = n
         all_edges.extend(g.edges)
@@ -75,9 +72,14 @@ def _rebuild_vault_graph(push_log: Callable[[str], None]) -> None:
     push_log(f"INFO: Vault rebuilt — {len(graph.nodes)} nodes, {len(graph.edges)} edges.")
 
 
+def _fixture_is_valid() -> bool:
+    """Return True if the fixture directory exists and contains files."""
+    return _FIXTURE_DIR.exists() and any(_FIXTURE_DIR.iterdir())
+
+
 def ensure_fixture(push_log: Callable[[str], None]) -> None:
     """Ensure fixtures/original_buggy/ exists, reset workspace/target/, rebuild vault graph."""
-    if not _FIXTURE_DIR.exists():
+    if not _fixture_is_valid():
         _download_fixture(push_log)
     _reset_workspace(push_log)
     _rebuild_vault_graph(push_log)

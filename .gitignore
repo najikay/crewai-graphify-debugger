@@ -83,3 +83,6 @@ Desktop.ini
 .secrets/
 secrets.json
 local_settings.py
+fixtures/
+screenshots/
+workspace/

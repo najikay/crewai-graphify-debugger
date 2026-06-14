@@ -45,6 +45,8 @@ export default function App() {
   const [patchedFiles, setPatchedFiles] = useState<Set<string>>(new Set());
   const [running, setRunning] = useState(false);
   const [dims, setDims] = useState({ w: 600, h: 500 });
+  const [viewerFile, setViewerFile] = useState<string | null>(null);
+  const [viewerContent, setViewerContent] = useState<string>("");
 
   const graphPane = useRef<HTMLDivElement>(null);
   const termRef = useRef<HTMLDivElement>(null);
@@ -75,6 +77,24 @@ export default function App() {
 
   // Load on mount — backend may not be ready yet, hence the retries above
   useEffect(() => { void loadGraph(); }, [loadGraph]);
+
+  // ── Reset workspace and reload graph ──────────────────────────────────────
+  const handleReset = useCallback(async () => {
+    try {
+      await axios.post("/api/reset");
+      setPatchedFiles(new Set());
+      await loadGraph();
+    } catch { /* ignore — server may be down */ }
+  }, [loadGraph]);
+
+  // ── Fetch and display a file from workspace/target/ ───────────────────────
+  const handleFileClick = useCallback(async (path: string) => {
+    try {
+      const { data } = await axios.get<string>(`/api/file?path=${encodeURIComponent(path)}`);
+      setViewerFile(path);
+      setViewerContent(data);
+    } catch { /* ignore */ }
+  }, []);
 
   // ── Canvas resize ──────────────────────────────────────────────────────────
   const updateDims = useCallback(() => {
@@ -155,6 +175,22 @@ export default function App() {
           <li className="i2">graph.json</li>
           <li className="i2">hot.md</li>
           <li className="i1">target/</li>
+          <li className="i2">broken-python/</li>
+          <li className="i3 file-item" onClick={() => void handleFileClick("broken-python/polygons/polygons.py")}>
+            polygons.py
+          </li>
+          <li className="i3 file-item" onClick={() => void handleFileClick("broken-python/mathsquiz/mathsquiz.py")}>
+            mathsquiz.py
+          </li>
+          <li className="i3 file-item" onClick={() => void handleFileClick("broken-python/mathsquiz/mathsquiz-step1.py")}>
+            mathsquiz-step1.py
+          </li>
+          <li className="i3 file-item" onClick={() => void handleFileClick("broken-python/mathsquiz/mathsquiz-step2.py")}>
+            mathsquiz-step2.py
+          </li>
+          <li className="i3 file-item" onClick={() => void handleFileClick("broken-python/mathsquiz/mathsquiz-step3.py")}>
+            mathsquiz-step3.py
+          </li>
           <li className="i1">root_cause_report.json</li>
           <li className="i1">token_efficiency_report.md</li>
         </ul>
@@ -167,12 +203,12 @@ export default function App() {
             {graphLabel}
           </span>
 
-          {/* Reload / retry button — always visible */}
+          {/* Reset workspace + reload graph */}
           <button
             className="icon-btn"
-            onClick={() => void loadGraph()}
-            title="Reload graph from backend"
-            disabled={graphStatus === "loading"}
+            onClick={() => void handleReset()}
+            title="Reset workspace and reload graph"
+            disabled={graphStatus === "loading" || running}
           >
             {graphStatus === "loading"
               ? <Loader size={13} className="spin" />
@@ -244,6 +280,19 @@ export default function App() {
           )}
         </div>
       </aside>
+
+      {/* ── Code viewer overlay ──────────────────────────────────── */}
+      {viewerFile && (
+        <div className="viewer-overlay" onClick={() => setViewerFile(null)}>
+          <div className="viewer-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="viewer-header">
+              <span>{viewerFile}</span>
+              <button className="icon-btn" onClick={() => setViewerFile(null)}>✕</button>
+            </div>
+            <pre className="viewer-content">{viewerContent}</pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

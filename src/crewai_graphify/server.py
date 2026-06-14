@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import json
 import logging
-import re
 import sys
 from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
@@ -13,25 +11,24 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any
 
-from crewai import Crew, Process
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 
-from crewai_graphify.agents.crew import navigator_agent, patcher_agent, reader_agent, reasoner_agent
-from crewai_graphify.agents.tasks import navigator_task, patcher_task, reader_task, reasoner_task
+from crewai_graphify.agents.pipeline import build_crew
 from crewai_graphify.main import _AnthropicClient, _save_efficiency_report, _save_root_cause
 from crewai_graphify.shared.budget_tracker import BudgetTracker
 from crewai_graphify.shared.config import AppConfig
 from crewai_graphify.shared.fixture_setup import ensure_fixture
 from crewai_graphify.shared.gatekeeper import ApiGatekeeper
 from crewai_graphify.shared.rate_limiter import ThrottledRateLimiter
+from crewai_graphify.shared.sse_log import _QueueLogHandler, _StdoutToQueue
 
 _VAULT_GRAPH = Path("workspace/vault/graph.json")
+_TARGET = Path("workspace/target")
 _EXECUTOR: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=1)
 _SSE_QUEUE: asyncio.Queue[str | None] = asyncio.Queue()
 _run_active: bool = False
-_ANSI_RE: re.Pattern[str] = re.compile(r"\x1b\[[0-9;]*m")
 
 app = FastAPI(title="CrewAI Graphify — Visual Agentic OS")
 app.add_middleware(
@@ -43,41 +40,14 @@ app.add_middleware(
 )
 
 
-class _QueueLogHandler(logging.Handler):
-    """Push every log record onto the SSE queue from inside a worker thread."""
-
-    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
-        super().__init__()
-        self._loop = loop
-
-    def emit(self, record: logging.LogRecord) -> None:
-        self._loop.call_soon_threadsafe(_SSE_QUEUE.put_nowait, self.format(record))
-
-
-class _StdoutToQueue(io.TextIOBase):
-    """Mirror sys.stdout writes into the SSE queue (captures CrewAI verbose output)."""
-    def __init__(self, loop: asyncio.AbstractEventLoop, orig: Any) -> None:
-        super().__init__()
-        self._loop = loop
-        self._orig = orig
-
-    def write(self, text: str) -> int:
-        self._orig.write(text)
-        for line in text.splitlines():
-            if line.strip():
-                self._loop.call_soon_threadsafe(_SSE_QUEUE.put_nowait, _ANSI_RE.sub("", line))
-        return len(text)
-
-    def flush(self) -> None:
-        self._orig.flush()
-
-
 def _run_pipeline(loop: asyncio.AbstractEventLoop) -> None:
     """Build and run the 4-agent crew; push log lines into the SSE queue."""
     global _run_active
+
     def _push(msg: str) -> None:
         loop.call_soon_threadsafe(_SSE_QUEUE.put_nowait, msg)
-    handler = _QueueLogHandler(loop)
+
+    handler = _QueueLogHandler(loop, _SSE_QUEUE)
     handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
     root_logger = logging.getLogger()
     root_logger.addHandler(handler)
@@ -91,20 +61,8 @@ def _run_pipeline(loop: asyncio.AbstractEventLoop) -> None:
             budget_tracker=tracker,
             rate_limiter=ThrottledRateLimiter(),
         )
-        nav, rdr, rsn, ptr = (
-            navigator_agent(), reader_agent(), reasoner_agent(), patcher_agent()
-        )
-        t1 = navigator_task(nav)
-        t2 = reader_task(rdr, t1)
-        t3 = reasoner_task(rsn, t2)
-        t4 = patcher_task(ptr, t3)
-        crew = Crew(
-            agents=[nav, rdr, rsn, ptr],
-            tasks=[t1, t2, t3, t4],
-            process=Process.sequential,
-            verbose=True,
-        )
-        with redirect_stdout(_StdoutToQueue(loop, sys.stdout)):
+        crew = build_crew()
+        with redirect_stdout(_StdoutToQueue(loop, _SSE_QUEUE, sys.stdout)):
             result = crew.kickoff()
         _save_root_cause(str(result))
         _save_efficiency_report(tracker.get_session_ledger())
@@ -135,6 +93,27 @@ async def execute_pipeline() -> dict[str, str]:
     loop = asyncio.get_running_loop()
     _EXECUTOR.submit(_run_pipeline, loop)
     return {"status": "started"}
+
+
+@app.post("/api/reset")
+async def reset_workspace() -> dict[str, str]:
+    """Wipe workspace/target/, copy pristine fixture, rebuild graph.json."""
+    if _run_active:
+        raise HTTPException(status_code=409, detail="A run is in progress.")
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(_EXECUTOR, lambda: ensure_fixture(lambda _msg: None))
+    return {"status": "ok"}
+
+
+@app.get("/api/file")
+async def get_file(path: str) -> PlainTextResponse:
+    """Return raw text of a file inside workspace/target/ (path-traversal safe)."""
+    fp = (_TARGET / path).resolve()
+    if not fp.is_relative_to(_TARGET.resolve()):
+        raise HTTPException(status_code=403, detail="Access denied.")
+    if not fp.exists():
+        raise HTTPException(status_code=404, detail=f"{path} not found.")
+    return PlainTextResponse(fp.read_text(encoding="utf-8"))
 
 
 @app.get("/api/stream")

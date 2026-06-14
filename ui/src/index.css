@@ -82,6 +82,28 @@ body {
   background: #0d1117;
 }
 
+/* ── Graph status label ──────────────────────────────────────── */
+.graph-label { font-size: 12px; font-weight: 600; color: #58a6ff; }
+.graph-label--err { color: #f85149; }
+
+/* ── Small icon button (reload / clear) ─────────────────────── */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: #8b949e;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  padding: 3px 6px;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  transition: color 0.15s, border-color 0.15s;
+}
+.icon-btn:hover:not(:disabled) { color: #c9d1d9; border-color: #8b949e; }
+.icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
 /* ── Run button ──────────────────────────────────────────────── */
 .run-btn {
   display: inline-flex;
@@ -114,9 +136,61 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
 }
-.ph  { color: #484f58; }
-.err { color: #f85149; }
+.ph       { color: #484f58; }
+.log-line { color: #c9d1d9; }
+.log-info { color: #79c0ff; }
+.log-warn { color: #d29922; }
+.log-err  { color: #f85149; }
 
 /* ── Spinner ─────────────────────────────────────────────────── */
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Clickable file items ─────────────────────────────────────── */
+.file-tree .i3 { padding-left: 3rem; }
+.file-item {
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.1s, color 0.1s;
+}
+.file-item:hover { background: #21262d; color: #c9d1d9; }
+
+/* ── Code viewer overlay ──────────────────────────────────────── */
+.viewer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.viewer-panel {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  width: 70vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid #30363d;
+  font-size: 12px;
+  color: #58a6ff;
+  flex-shrink: 0;
+}
+.viewer-content {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+  font-size: 11px;
+  line-height: 1.7;
+  white-space: pre;
+  color: #c9d1d9;
+}

@@ -83,6 +83,16 @@ class TestSanitize:
         g = builder.build(src)
         assert not any(e.source == "fib" and e.target == "fib" for e in g.edges)
 
+    def test_syntax_error_creates_fallback_node(self, builder: GraphBuilder, tmp_path: Path) -> None:
+        """Python 2 syntax triggers SyntaxError → single __main__ MODULE node, no edges."""
+        src = tmp_path / "py2.py"
+        src.write_text('print "hello"\n')
+        g = builder.build(src)
+        assert len(g.nodes) == 1
+        assert g.nodes[0].id == "__main__"
+        assert g.nodes[0].node_type.value == "module"
+        assert len(g.edges) == 0
+
 
 class TestPersistence:
     def test_save_graph_writes_json(self, builder: GraphBuilder, graph: Graph) -> None:
