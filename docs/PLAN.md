@@ -392,6 +392,12 @@ Phase 6 wraps the CLI pipeline in a browser-based **Agentic OS** — a three-pan
 
 **Streaming implementation** — `crew.kickoff()` runs inside a `concurrent.futures.ThreadPoolExecutor`. Agent log lines are pushed to an `asyncio.Queue`; the `/api/stream` SSE endpoint returns `Content-Type: text/event-stream` and drains the queue, forwarding each line as a `data: <line>\n\n` SSE event. A final `event: done\ndata: {}\n\n` signals run completion.
 
+**stdout capture** — A `_StdoutToQueue` class (subclasses `io.TextIOBase`) wraps `sys.stdout` for the duration of `crew.kickoff()` via `contextlib.redirect_stdout`. Each `write()` call forwards to the original stdout AND pushes non-empty lines to the SSE queue. ANSI SGR escape codes are stripped with `_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")` before delivery to the React terminal.
+
+**Fixture auto-setup** — `shared/fixture_setup.py::ensure_fixture()` is called at the top of every pipeline run. It downloads `martinpeck/broken-python` as a ZIP from GitHub if `fixtures/original_buggy/` is absent, then always wipes `workspace/target/` and copies a fresh set of files, and finally re-runs `GraphBuilder` recursively over all `workspace/target/**/*.py` files to regenerate `workspace/vault/graph.json` and `hot.md` with all sub-folder modules included.
+
+**Uvicorn stability** — `--reload-exclude "fixtures/*" --reload-exclude "workspace/*"` prevents the ZIP extraction and workspace file writes from triggering a server restart loop during fixture download.
+
 ### 7.3 Frontend — React SPA (`ui/`)
 
 ```
@@ -420,11 +426,10 @@ ui/
 
 ### 7.4 Graph Panel (`GraphCanvas.tsx`)
 
-- Fetches `GET /api/graph` on mount.
-- Renders via `react-force-graph` (`<ForceGraph2D>`), which handles force-directed layout and pan/zoom natively using D3 under the hood.
-- **Hot nodes** (those listed in the Navigator's output) are painted red; cold nodes are grey.
-- Clicking a node emits a `nodeSelected` event that highlights the corresponding file and line range in the File Explorer.
-- Directed edges carry a label showing the dependency relation.
+- Fetches `GET /api/graph` on mount with 4-attempt exponential back-off (1.5 s, 3 s, 4.5 s).
+- Renders via `react-force-graph-2d` (`<ForceGraph2D>`), which handles force-directed layout and pan/zoom natively using D3 under the hood.
+- **Patched-node highlighting** — the React SSE consumer intercepts lines matching `"Patch applied to <path>: …"`. The extracted path is stored in a `patchedFiles: Set<string>` state; the `nodeColor` callback checks `node.file_path.includes(patchedFile)` and returns `#10b981` (green) for patched files, `#58a6ff` (blue) for all others.
+- A `↻` reload button fetches the latest `graph.json` at any time; the graph also auto-reloads after each pipeline run.
 
 ### 7.5 Agent Terminal (`AgentTerminal.tsx`)
 

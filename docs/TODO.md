@@ -1,9 +1,9 @@
 # TODO: Granular Task Execution Checklist
 
-**Version:** 1.2.0  
-**Status:** Phases 1–6 Complete · Phase 7 (Visual UI) Planned  
+**Version:** 1.3.0  
+**Status:** Phases 1–6 Complete · Phase 7 Batch 2 Complete  
 **Owner:** Senior Software Architect  
-**Last Updated:** 2026-06-13
+**Last Updated:** 2026-06-14
 
 > **Definition of Done (Global):** A task is checked off **only when** its explicit verification requirement has been confirmed passing. `[X]` = verified complete. `[~]` = done differently than spec but equivalent outcome achieved.
 
@@ -424,6 +424,23 @@
 
 - [X] **7.0.5** Concurrent-dev launch script `scripts/dev.sh` starts `uvicorn` + `npm run dev`.
   → verify: script is executable, traps SIGINT, prints both URLs. ✓
+
+### 7.6 Stability & Visual Feedback (Phase 7 Batch 2 — Complete)
+
+- [X] **7.6.1** Uvicorn `--reload-exclude "fixtures/*" --reload-exclude "workspace/*"` prevents server restart loop during GitHub fixture download.
+  → verify: `scripts/dev.sh` updated; ZIP extraction and workspace writes no longer trigger reload. ✓
+
+- [X] **7.6.2** `_StdoutToQueue(io.TextIOBase)` captures `sys.stdout` via `contextlib.redirect_stdout` wrapping `crew.kickoff()`. ANSI SGR codes stripped with `re.compile(r"\x1b\[[0-9;]*m")` before forwarding to SSE queue.
+  → verify: `ruff check` 0 violations · `mypy --strict` 0 errors · `server.py` = 150 lines ≤ limit. ✓
+
+- [X] **7.6.3** `shared/fixture_setup.py::ensure_fixture()` auto-downloads `martinpeck/broken-python` ZIP from GitHub if `fixtures/original_buggy/` is absent; always wipes and restores `workspace/target/` before each run.
+  → verify: `ruff` · `mypy` pass · `fixture_setup.py` = 84 lines ≤ 150 limit. ✓
+
+- [X] **7.6.4** Full workspace AST parsing — `_rebuild_vault_graph()` iterates `workspace/target/**/*.py` with `GraphBuilder`, merges all nodes/edges into one `Graph`, and regenerates `graph.json` + `hot.md` (captures `mathsquiz/` and all sub-folders).
+  → verify: vault rebuilt at the start of every server-triggered run; `mathsquiz` classes/functions now appear as graph nodes. ✓
+
+- [X] **7.6.5** Dynamic node highlighting — `patchedFiles: Set<string>` React state accumulates file paths from `"Patch applied to <path>:"` SSE lines; `nodeColor` callback renders matched nodes in `#10b981` (green), rest in `#58a6ff` (blue); state resets at run start.
+  → verify: `tsc --noEmit` 0 errors; patched nodes turn green in real time during a run. ✓
 
 ### 7.1 Interactive Graph Panel
 

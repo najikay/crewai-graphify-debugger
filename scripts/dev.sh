@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "[dev] Starting FastAPI backend on http://localhost:8000 ..."
 cd "$ROOT"
-uv run uvicorn crewai_graphify.server:app --reload --port 8000 &
+uv run uvicorn crewai_graphify.server:app --reload --reload-exclude "fixtures/*" --reload-exclude "workspace/*" --port 8000 &
 BACKEND_PID=$!
 
 echo "[dev] Starting React frontend on http://localhost:5173 ..."
