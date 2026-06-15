@@ -1,0 +1,70 @@
+{
+  "file_path": "workspace/target/broken-python/polygons/polygons.py",
+  "nodes": [
+    {
+      "id": "__main__",
+      "name": "__main__",
+      "node_type": "module",
+      "file_path": "workspace/target/broken-python/polygons/polygons.py",
+      "start_line": 1,
+      "end_line": 69,
+      "docstring": null
+    },
+    {
+      "id": "Polygon",
+      "name": "Polygon",
+      "node_type": "class",
+      "file_path": "workspace/target/broken-python/polygons/polygons.py",
+      "start_line": 3,
+      "end_line": 8,
+      "docstring": null
+    },
+    {
+      "id": "Polygon.__init__",
+      "name": "__init__",
+      "node_type": "method",
+      "file_path": "workspace/target/broken-python/polygons/polygons.py",
+      "start_line": 5,
+      "end_line": 8,
+      "docstring": null
+    },
+    {
+      "id": "calc_polygon_details",
+      "name": "calc_polygon_details",
+      "node_type": "function",
+      "file_path": "workspace/target/broken-python/polygons/polygons.py",
+      "start_line": 13,
+      "end_line": 36,
+      "docstring": null
+    },
+    {
+      "id": "draw_polygon",
+      "name": "draw_polygon",
+      "node_type": "function",
+      "file_path": "workspace/target/broken-python/polygons/polygons.py",
+      "start_line": 41,
+      "end_line": 53,
+      "docstring": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "__main__",
+      "target": "calc_polygon_details",
+      "edge_type": "calls",
+      "weight": 0.9
+    },
+    {
+      "source": "__main__",
+      "target": "draw_polygon",
+      "edge_type": "calls",
+      "weight": 0.9
+    },
+    {
+      "source": "calc_polygon_details",
+      "target": "Polygon",
+      "edge_type": "instantiates",
+      "weight": 0.8
+    }
+  ]
+}
