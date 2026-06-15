@@ -1,8 +1,8 @@
-"""Integration test — graph-guided slicing saves >50 % tokens vs. naive full-file dump.
+"""Integration test — graph-guided slicing yields a large context reduction.
 
-The test builds a synthetic 10,000-line monolith, pretends the graph-guided
-crew read only a small slice (3,000 tokens), and asserts that the efficiency
-report produced by ``_save_efficiency_report`` records ≥ 50 % token savings.
+The test builds a synthetic 10,000-line monolith and asserts that the efficiency
+report produced by ``_save_efficiency_report`` records a >50 % context reduction
+(the hot-node slice is a tiny fraction of the whole file's line count).
 """
 from __future__ import annotations
 
@@ -18,10 +18,9 @@ from crewai_graphify.shared.budget_tracker import SessionLedger
 _WKSP = "crewai_graphify.main._WORKSPACE"
 _TGTPY = "crewai_graphify.main._TARGET_PY"
 
-# 10,000 lines × 80 chars = 800,000 chars ≈ 200,000 naive tokens (@4 chars/token)
+# A 10,000-line monolith; the graph-guided hot slice (24 lines) is a tiny fraction.
 _MONOLITH_LINES = 10_000
 _CHARS_PER_LINE = 80
-_CHARS_PER_TOKEN = 4
 _GRAPH_GUIDED_TOKENS = 3_000  # only hot-node slices were read
 
 
@@ -54,30 +53,25 @@ class TestTokenEfficiency:
             _save_efficiency_report(ledger)
         assert (tmp_path / "token_efficiency_report.md").exists()
 
-    def test_savings_exceed_50_percent(
+    def test_context_reduction_exceeds_50_percent(
         self, monolith: Path, ledger: SessionLedger, tmp_path: Path
     ) -> None:
-        """Graph-guided reading of 3 000 tokens out of a 200 000-token monolith → 98.5 % saving."""
+        """Reading only the 24-line hot slice of a 10k-line file → ~100 % context reduction."""
         with patch(_WKSP, tmp_path), patch(_TGTPY, monolith):
             _save_efficiency_report(ledger)
         text = (tmp_path / "token_efficiency_report.md").read_text(encoding="utf-8")
-        # Extract the percentage from the "Savings" row: "… tokens (XX.X% reduction)"
-        match = re.search(r"\((\d+(?:\.\d+)?)% reduction\)", text)
-        assert match is not None, "Savings percentage not found in report"
-        pct = float(match.group(1))
-        assert pct > 50.0, f"Expected >50 % savings, got {pct:.1f} %"
+        match = re.search(r"~(\d+)% less context", text)
+        assert match is not None, "Context-reduction percentage not found in report"
+        assert float(match.group(1)) > 50.0
 
-    def test_naive_token_count_reflects_file_size(
+    def test_full_line_count_reflects_file_size(
         self, monolith: Path, ledger: SessionLedger, tmp_path: Path
     ) -> None:
-        """Naive count = file_chars / 4; derived from actual file to stay exact."""
-        expected_naive = len(monolith.read_text(encoding="utf-8")) // _CHARS_PER_TOKEN
+        """The 'entire file' baseline row shows the full line count (10,000)."""
         with patch(_WKSP, tmp_path), patch(_TGTPY, monolith):
             _save_efficiency_report(ledger)
         text = (tmp_path / "token_efficiency_report.md").read_text(encoding="utf-8")
-        assert str(expected_naive) in text.replace(",", ""), (
-            f"Expected naive count {expected_naive} in report"
-        )
+        assert str(_MONOLITH_LINES) in text  # full-file line count in the report
 
     def test_actual_tokens_appear_in_report(
         self, monolith: Path, ledger: SessionLedger, tmp_path: Path

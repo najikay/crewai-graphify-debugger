@@ -16,10 +16,6 @@ class TestAllowList:
     def test_deepseek_chat_in_allowed_models_property(self) -> None:
         assert "deepseek-chat" in VersionValidator().allowed_models
 
-# ===========================================================================
-# Singleton enforcement
-# ===========================================================================
-
 
 class TestSingleton:
     def test_two_calls_return_identical_object(self) -> None:
@@ -42,11 +38,6 @@ class TestSingleton:
         gk = ApiGatekeeper()
         with pytest.raises(RuntimeError, match="initialize"):
             gk.session_report()
-
-
-# ===========================================================================
-# Pre-call cost estimation — worst-case ceiling
-# ===========================================================================
 
 
 class TestCostEstimation:
@@ -83,11 +74,6 @@ class TestCostEstimation:
             + (payload.max_tokens / 1_000_000) * pricing.output_per_million_tokens_usd
         )
         assert cost == pytest.approx(base * 2.0, rel=1e-9)
-
-
-# ===========================================================================
-# call() pipeline ordering and hard stops
-# ===========================================================================
 
 
 class TestCallPipeline:

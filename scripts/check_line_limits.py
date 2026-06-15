@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""CI gate: fail if any .py file under src/ exceeds MAX_LINES source lines.
+"""CI gate: fail if any .py file under src/ or tests/ exceeds MAX_LINES lines.
+
+Per the submission guidelines (§3.2, §6.6) the 150-line limit applies to test
+files as well, so both directories are scanned by default.
 
 Usage::
 
-    python scripts/check_line_limits.py              # uses defaults
+    python scripts/check_line_limits.py              # scans src/ and tests/
     python scripts/check_line_limits.py --max-lines 150 src/
-    python scripts/check_line_limits.py --max-lines 150 src/ --verbose
+    python scripts/check_line_limits.py --max-lines 150 src/ tests/ --verbose
 
 Exit codes:
     0  — all files within limit
@@ -26,9 +29,9 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "directories",
         nargs="*",
-        default=["src"],
+        default=["src", "tests"],
         metavar="DIR",
-        help="Root directories to scan (default: src/).",
+        help="Root directories to scan (default: src/ and tests/).",
     )
     parser.add_argument(
         "--max-lines",

@@ -1,4 +1,4 @@
-"""Unit tests for GraphBuilder."""
+"""Unit tests for GraphBuilder and Graph.merge."""
 from __future__ import annotations
 
 import json
@@ -13,8 +13,8 @@ TARGET = Path("workspace/target/broken-python/polygons/polygons.py")
 
 
 def _mnode(node_id: str) -> Node:
-    return Node(id=node_id, name=node_id, node_type=NodeType.FUNCTION,
-                file_path="f.py", start_line=1, end_line=2)
+    return Node(id=node_id, name=node_id, node_type=NodeType.FUNCTION, file_path="f.py",
+                start_line=1, end_line=2)
 
 
 def _medge(src: str, tgt: str) -> Edge:
@@ -54,11 +54,8 @@ class TestNodeCollection:
 
 class TestEdgeCollection:
     def test_instantiates_edge_exists(self, graph: Graph) -> None:
-        edge = next(
-            (e for e in graph.edges
-             if e.source == "calc_polygon_details" and e.target == "Polygon"),
-            None,
-        )
+        edge = next((e for e in graph.edges
+                     if e.source == "calc_polygon_details" and e.target == "Polygon"), None)
         assert edge is not None and edge.edge_type == EdgeType.INSTANTIATES
 
     def test_calls_edges_from_main(self, graph: Graph) -> None:
@@ -72,35 +69,31 @@ class TestSanitize:
     def test_new_keyword_stripped(self, builder: GraphBuilder, tmp_path: Path) -> None:
         src = tmp_path / "broken.py"
         src.write_text("class Foo:\n    pass\ndef bar():\n    x = new Foo()\n")
-        g = builder.build(src)
-        assert any(n.id == "Foo" for n in g.nodes)
+        assert any(n.id == "Foo" for n in builder.build(src).nodes)
 
     def test_build_does_not_raise(self, builder: GraphBuilder) -> None:
         assert len(builder.build(TARGET).nodes) >= 4
 
     def test_subscript_call_ignored(self, builder: GraphBuilder, tmp_path: Path) -> None:
-        """Covers _call_name() return-None branch (func is neither Name nor Attribute)."""
+        # _call_name() returns None when func is neither Name nor Attribute.
         src = tmp_path / "sub.py"
         src.write_text("funcs = [print]\nfuncs[0]()\n")
-        g = builder.build(src)
-        assert len(g.edges) == 0
+        assert len(builder.build(src).edges) == 0
 
     def test_recursive_call_excluded(self, builder: GraphBuilder, tmp_path: Path) -> None:
-        """Covers callee == scope branch — self-calls must not produce edges."""
+        # callee == scope branch — self-calls must not produce edges.
         src = tmp_path / "rec.py"
         src.write_text("def fib(n: int) -> int:\n    return fib(n - 1) if n > 0 else 0\n")
         g = builder.build(src)
         assert not any(e.source == "fib" and e.target == "fib" for e in g.edges)
 
     def test_syntax_error_creates_fallback_node(self, builder: GraphBuilder, tmp_path: Path) -> None:
-        """Python 2 syntax triggers SyntaxError → single __main__ MODULE node, no edges."""
+        # Python 2 syntax → SyntaxError → single __main__ MODULE node, no edges.
         src = tmp_path / "py2.py"
         src.write_text('print "hello"\n')
         g = builder.build(src)
-        assert len(g.nodes) == 1
-        assert g.nodes[0].id == "__main__"
-        assert g.nodes[0].node_type.value == "module"
-        assert len(g.edges) == 0
+        assert len(g.nodes) == 1 and g.nodes[0].id == "__main__"
+        assert g.nodes[0].node_type.value == "module" and len(g.edges) == 0
 
 
 class TestPersistence:
@@ -122,40 +115,31 @@ class TestPersistence:
 
 class TestGraphMerge:
     def test_dedupes_identical_edges_across_files(self) -> None:
-        """Duplicate (source, target) edges from multiple files collapse to one."""
-        g1 = Graph(file_path="a.py", nodes=[_mnode("__main__"), _mnode("welcome")],
-                   edges=[_medge("__main__", "welcome")])
-        g2 = Graph(file_path="b.py", nodes=[_mnode("__main__"), _mnode("welcome")],
-                   edges=[_medge("__main__", "welcome")])
-        merged = Graph.merge([g1, g2], "workspace/target")
-        assert len(merged.edges) == 1
+        nodes = [_mnode("__main__"), _mnode("welcome")]
+        g1 = Graph(file_path="a.py", nodes=nodes, edges=[_medge("__main__", "welcome")])
+        g2 = Graph(file_path="b.py", nodes=nodes, edges=[_medge("__main__", "welcome")])
+        assert len(Graph.merge([g1, g2], "workspace/target").edges) == 1
 
     def test_dedupes_nodes_by_id(self) -> None:
-        """The shared __main__ node id collapses to a single node."""
         g1 = Graph(file_path="a.py", nodes=[_mnode("__main__")])
         g2 = Graph(file_path="b.py", nodes=[_mnode("__main__")])
         assert len(Graph.merge([g1, g2], "t").nodes) == 1
 
     def test_keeps_distinct_edges(self) -> None:
-        """Edges with different targets are preserved."""
-        g = Graph(file_path="a.py",
-                  nodes=[_mnode("__main__"), _mnode("a"), _mnode("b")],
+        g = Graph(file_path="a.py", nodes=[_mnode("__main__"), _mnode("a"), _mnode("b")],
                   edges=[_medge("__main__", "a"), _medge("__main__", "b")])
         assert len(Graph.merge([g], "t").edges) == 2
 
     def test_first_occurrence_wins(self) -> None:
-        """The first edge for a (source, target) pair is the one retained."""
         first = Edge(source="x", target="y", edge_type=EdgeType.CALLS, weight=0.9)
         second = Edge(source="x", target="y", edge_type=EdgeType.INSTANTIATES, weight=0.1)
         g1 = Graph(file_path="a.py", nodes=[_mnode("x"), _mnode("y")], edges=[first])
         g2 = Graph(file_path="b.py", nodes=[_mnode("x"), _mnode("y")], edges=[second])
-        merged = Graph.merge([g1, g2], "t")
-        assert merged.edges[0].edge_type == EdgeType.CALLS
+        assert Graph.merge([g1, g2], "t").edges[0].edge_type == EdgeType.CALLS
 
     def test_empty_input_yields_empty_graph(self) -> None:
         merged = Graph.merge([], "t")
-        assert merged.nodes == [] and merged.edges == []
-        assert merged.file_path == "t"
+        assert merged.nodes == [] and merged.edges == [] and merged.file_path == "t"
 
     def test_merged_file_path_is_set(self) -> None:
         g = Graph(file_path="a.py", nodes=[_mnode("__main__")])
