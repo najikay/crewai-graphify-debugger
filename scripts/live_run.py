@@ -12,7 +12,7 @@ import sys
 
 import crewai_graphify.shared.env  # noqa: F401  — load_dotenv() side effect on import
 from crewai_graphify.agents.pipeline import build_crew
-from crewai_graphify.main import _AnthropicClient
+from crewai_graphify.main import _AnthropicClient, _save_efficiency_report, _save_root_cause
 from crewai_graphify.sdk.deepseek_client import DeepSeekAdapter
 from crewai_graphify.shared.archiver import archive_run
 from crewai_graphify.shared.budget_tracker import BudgetTracker
@@ -47,13 +47,13 @@ def _init_gatekeeper() -> BudgetTracker:
 def main() -> int:
     _log(f"=== LIVE RUN — provider={os.getenv('LLM_PROVIDER')} model={os.getenv('DEFAULT_MODEL')} ===")
 
-    _log("\n[1/5] Resetting workspace/target and rebuilding vault graph…")
+    _log("\n[1/6] Resetting workspace/target and rebuilding vault graph…")
     ensure_fixture(_log)
 
-    _log("\n[2/5] Initialising ApiGatekeeper (budget + telemetry) for the provider…")
+    _log("\n[2/6] Initialising ApiGatekeeper (budget + telemetry) for the provider…")
     tracker = _init_gatekeeper()
 
-    _log("\n[3/5] Running the 4-agent crew (Navigator → Reader → Reasoner → Patcher)…")
+    _log("\n[3/6] Running the 4-agent crew (Navigator → Reader → Reasoner → Patcher)…")
     retry_hint = ""
     result = ""
     for attempt in range(3):
@@ -64,7 +64,7 @@ def main() -> int:
         retry_hint = _RETRY_HINT
         _log(f"INFO: Attempt {attempt + 1}/3 skipped — retrying with expanded context…")
 
-    _log("\n[4/5] Crew final answer:")
+    _log("\n[4/6] Crew final answer:")
     _log(result)
 
     ledger = tracker.get_session_ledger()
@@ -75,7 +75,11 @@ def main() -> int:
         f"${ledger.total_cost_usd:.6f}"
     )
 
-    _log("\n[5/5] Post-run validation gate + archiver:")
+    _log("\n[5/6] Persisting root-cause + token-efficiency reports…")
+    _save_root_cause(result)
+    _save_efficiency_report(ledger)  # patched generator → ~68% context reduction, no '0%'
+
+    _log("\n[6/6] Post-run validation gate + archiver:")
     archive_run(result, _log)
     return 0
 
