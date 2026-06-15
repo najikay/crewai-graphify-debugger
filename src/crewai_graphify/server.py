@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import sys
 from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
@@ -18,6 +19,7 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 import crewai_graphify.shared.env  # noqa: F401  — load_dotenv() side effect on import
 from crewai_graphify.agents.pipeline import build_crew
 from crewai_graphify.main import _AnthropicClient, _save_efficiency_report, _save_root_cause
+from crewai_graphify.sdk.deepseek_client import DeepSeekAdapter
 from crewai_graphify.shared.archiver import archive_run
 from crewai_graphify.shared.budget_tracker import BudgetTracker
 from crewai_graphify.shared.config import AppConfig
@@ -59,12 +61,12 @@ def _run_pipeline(loop: asyncio.AbstractEventLoop) -> None:
     try:
         ensure_fixture(_push)
         ApiGatekeeper._instance = None  # reset singleton for a fresh run
-        config = AppConfig.load()
-        tracker = BudgetTracker(config)
+        tracker = BudgetTracker(AppConfig.load())
+        # Provider-aware adapter so DeepSeek ALSO routes through the gatekeeper (budget+telemetry).
+        deepseek = os.getenv("LLM_PROVIDER", "claude").lower() == "deepseek"
+        client = DeepSeekAdapter() if deepseek else _AnthropicClient()
         ApiGatekeeper().initialize(
-            client=_AnthropicClient(),
-            budget_tracker=tracker,
-            rate_limiter=ThrottledRateLimiter(),
+            client=client, budget_tracker=tracker, rate_limiter=ThrottledRateLimiter()
         )
         retry_hint = ""
         result: Any = ""

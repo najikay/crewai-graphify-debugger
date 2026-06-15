@@ -580,17 +580,26 @@ without it, a no-op patch could leave a byte unchanged and silently "pass".
 מכאן ואילך הפיתוח עובר ל-**Frontend / UI** — בניית ה-Command Center
 (Graph Viewer, Live Terminal, Code Inspector) מעל ה-API הקיים.
 
-### 10.2 Technical Debt — DeepSeek עוקף את ה-ApiGatekeeper
+### 10.2 Technical Debt — DeepSeek ו-ApiGatekeeper (נפתר ✅)
 
-**תיאור החוב:** מכיוון ש-DeepSeek מנותב ישירות דרך `crewai.LLM` (litellm),
-הוא כרגע **עוקף (bypasses)** את ה-`ApiGatekeeper`. כתוצאה מכך, מעקב ה-**Budget**
-וה-**telemetry** עבור הרצות DeepSeek **נדחה (deferred)** לעדכון עתידי.
+**מצב:** החוב **נפתר**. בעבר DeepSeek נותב ישירות דרך `crewai.LLM` (litellm)
+ו**עקף (bypassed)** את ה-`ApiGatekeeper`, כך שה-**Budget** וה-**telemetry**
+לא נרשמו עבורו.
 
-- **מה כן עובד:** הנתיב של Claude (`ClaudeClient`) ממשיך לעבור במלואו דרך
-  ה-`ApiGatekeeper`, ולכן אכיפת התקציב (budget enforcement), ה-rate-limiting
-  וה-`SessionLedger` תקפים עבורו.
-- **מה לא עובד:** הרצות DeepSeek אינן נספרות ב-`BudgetTracker`, אינן נאכפות
-  מול תקרת ה-budget, ואינן מתועדות ב-Session Ledger.
-- **כיוון פתרון עתידי:** עטיפת ה-provider של DeepSeek ב-adapter שמיישם את אותו
-  `_ClientProtocol` כמו `_AnthropicClient`, כך שכל הקריאות ינותבו דרך
-  ה-`ApiGatekeeper` ללא תלות ב-provider.
+**הפתרון שיושם:**
+
+- **factory אחיד:** `agents/crew.py::_make_llm()` מחזיר `GatekeeperLLM` עבור
+  **שני** ה-providers; רק ה-`model` ב-payload משתנה. כך כל call (Claude או
+  DeepSeek) עובר דרך `ApiGatekeeper.call()` — FR-10 מתקיים שוב במלואו.
+- **adapter ייעודי:** `sdk/deepseek_client.py::DeepSeekAdapter` מיישם את
+  `_ClientProtocol` (`create_message`), קורא ל-DeepSeek דרך litellm ומחזיר
+  `LLMResponse` עם `prompt_tokens`/`completion_tokens` אמיתיים.
+- **בחירת provider ב-init:** `server.py` (ו-`scripts/live_run.py`) מאתחלים את
+  ה-gatekeeper עם ה-adapter המתאים לפי `LLM_PROVIDER` (Anthropic ל-claude,
+  DeepSeek ל-deepseek).
+- **pricing + allow-list:** `deepseek-chat` נוסף ל-`config/budget_limits.json`
+  (תמחור) ול-allow-list של ה-`VersionValidator`, כך שה-`BudgetTracker` מתמחר
+  ורושם הרצות DeepSeek בדיוק כמו Claude.
+
+**תוצאה:** מעקב ה-Budget וה-telemetry פעיל כעת עבור כל ה-providers; ה-`SessionLedger`
+סופר עלויות DeepSeek אמיתיות.

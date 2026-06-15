@@ -1,7 +1,7 @@
 # TODO: Granular Task Execution Checklist
 
-**Version:** 1.6.0  
-**Status:** Phases 1–7 Complete (Backend Orchestration ✅) · Phase 8 (UI) In Progress  
+**Version:** 1.7.0  
+**Status:** Phases 1–7 Complete (Backend Orchestration ✅) · Phase 8 (UI + Tech-Debt) Complete · Tech Debt resolved ✅  
 **Owner:** Senior Software Architect  
 **Last Updated:** 2026-06-14
 
@@ -553,10 +553,10 @@
 - [X] **8.0.3** כל ה-quality gates ירוקים בסיום שלב ה-Backend: 213 בדיקות עוברות, branch coverage של 96.19%, מגבלת 150 שורות לקובץ נשמרת, ו-`ruff check` נקי.  
   → אימות: `uv run pytest` → 213 passed; `check_line_limits.py` → all files OK. ✓
 
-### 8.1 Technical Debt — חוב טכני שנרשם
+### 8.1 Technical Debt — חוב טכני (נפתר ✅)
 
-- [ ] **8.1.1** **DeepSeek עוקף את ה-ApiGatekeeper.** מכיוון ש-DeepSeek מנותב ישירות דרך `crewai.LLM` (litellm), הוא כרגע **עוקף (bypasses)** את ה-`ApiGatekeeper`. לכן מעקב ה-**Budget** וה-**telemetry** עבור הרצות DeepSeek **נדחה (deferred)** לעדכון עתידי. הנתיב של Claude (`ClaudeClient`) ממשיך לעבור במלואו דרך ה-gatekeeper, כך שאכיפת התקציב ו-Session Ledger תקפים רק עבורו.  
-  → השפעה: הרצות DeepSeek לא נספרות ב-`BudgetTracker` ולא נאכפות מול תקרת ה-budget. פתרון עתידי: עטיפת ה-provider של DeepSeek ב-adapter שמנתב דרך ה-`ApiGatekeeper`.
+- [X] **8.1.1** **DeepSeek מנותב כעת דרך ה-ApiGatekeeper (החוב נפתר).** בעבר DeepSeek נותב ישירות דרך `crewai.LLM` (litellm) ו**עקף (bypassed)** את ה-`ApiGatekeeper`, כך שה-**Budget** וה-**telemetry** לא נרשמו. כעת בוצע refactor: `_make_llm()` מחזיר `GatekeeperLLM` עבור **שני** ה-providers (גם Claude וגם DeepSeek), כך שכל call עובר דרך ה-`ApiGatekeeper`. נוסף adapter ייעודי `DeepSeekAdapter` (ב-`sdk/deepseek_client.py`) שממש את ה-`_ClientProtocol` ומחזיר `LLMResponse` עם token usage אמיתי; ה-provider נבחר ב-init של ה-gatekeeper לפי `LLM_PROVIDER`.  
+  → אימות: `deepseek-chat` נוסף ל-`budget_limits.json` (pricing) ול-allow-list של ה-`VersionValidator`; `test_deepseek_client.py` (8 בדיקות) מאמת מיפוי tokens ו-content; ה-`BudgetTracker` רושם כעת עלויות DeepSeek בדיוק כמו Claude. FR-10 (כל הקריאות דרך ה-gatekeeper) מתקיים שוב עבור כל ה-providers. ✓
 
 ### 8.2 רכיבי ה-UI Command Center
 
@@ -581,3 +581,14 @@
 
 - [X] **8.3.3** **Binding ל-ForceGraph canvas.** ה-state `patchedFiles` מועבר כ-prop ל-`GraphViewer`, וה-`nodeColor` של ה-`ForceGraph2D` מחזיר ירוק `#22c55e` כאשר ה-node תואם קובץ שעבר patch, אחרת כחול `#3b82f6`.  
   → אימות: `npm run test:cov` → 24 בדיקות עוברות, 100% coverage על `format.ts` ו-`graph.ts`; `eslint` ו-`tsc -b` נקיים.
+
+### 8.4 Bug Fix — תיאום ספירת ה-edges בין ה-Backend ל-UI
+
+- [X] **8.4.1** **דה-דופליקציה של edges במיזוג רב-קבצי.** ה-backend דיווח על "9 edges" אך ה-UI הציג 6. ה-root cause: ב-`_rebuild_vault_graph` ה-nodes עברו dedup לפי `id` (כל `__main__` של מודול התמזג לאחד), אך ה-edges נצברו ב-`all_edges.extend()` ללא dedup — כך ש-edges זהים מקבצי `mathsquiz-step*.py` הוכפלו. ה-ForceGraph מאחד אותם ל-6 ויזואלית.  
+  → תיקון: נוספה classmethod `Graph.merge(graphs, file_path)` (ב-`models/graph.py`) שמבצעת dedup ל-nodes לפי `id` ול-edges לפי המפתח `(source, target)` — אותו מפתח שה-ForceGraph משתמש בו — כך שספירת ה-edges בקובץ `graph.json` תואמת בדיוק את מה שמוצג. `_rebuild_vault_graph` משתמש כעת ב-`Graph.merge`.  
+  → אימות: `graph.json` עודכן ל-6 edges; `test_graph_builder.py::TestGraphMerge` (6 בדיקות) מאמת dedup, first-occurrence-wins, ו-empty input. ✓
+
+### 8.5 UI — חיווט כפתור "Reset Workspace"
+
+- [X] **8.5.1** **Reset מלא של ה-state.** כפתור ה-`↻` ב-topbar קורא ל-`handleReset` ב-`useDebuggerSession`, ששולח `POST /api/reset` (מריץ את `_reset_workspace()` — העתקה פיזית של ה-fixture הנקי ובנייה מחדש של ה-graph). בהצלחה: ה-state `patchedFiles` מתאפס, ה-**terminal logs** מתנקים (`setLogs([])`), ו-`graph.json` הנקי נטען מחדש כדי לרענן את ה-canvas.  
+  → אימות: `tsc -b` ו-`eslint` נקיים; ה-handler מבצע את שלושת הצעדים (clear patched, clear logs, reload graph).

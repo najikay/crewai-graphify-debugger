@@ -18,6 +18,7 @@ _PATCHES = [
     "crewai_graphify.agents.pipeline.reasoner_task",
     "crewai_graphify.agents.pipeline.patcher_task",
     "crewai_graphify.agents.pipeline.Crew",
+    "crewai_graphify.agents.pipeline.reset_read_cap",
 ]
 
 
@@ -28,7 +29,7 @@ def mocked_crew():  # type: ignore[no-untyped-def]
     mocks = [p.start() for p in patchers]
     names = [
         "nav_agent", "rdr_agent", "rsn_agent", "ptr_agent",
-        "nav_task", "rdr_task", "rsn_task", "ptr_task", "Crew",
+        "nav_task", "rdr_task", "rsn_task", "ptr_task", "Crew", "reset_read_cap",
     ]
     yield dict(zip(names, mocks, strict=True))
     for p in patchers:
@@ -40,6 +41,11 @@ class TestBuildCrew:
         """build_crew() must return (Crew instance, inputs dict) tuple."""
         crew, inputs = build_crew()
         assert crew is mocked_crew["Crew"].return_value
+
+    def test_resets_read_cap_each_run(self, mocked_crew) -> None:  # type: ignore[no-untyped-def]
+        """Every build_crew() must reset the read cap so re-runs aren't bricked."""
+        build_crew()
+        mocked_crew["reset_read_cap"].assert_called_once()
 
     def test_returns_inputs_dict_with_hot_md_key(self, mocked_crew) -> None:  # type: ignore[no-untyped-def]
         """Inputs dict must contain the hot_md_content key."""

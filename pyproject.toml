@@ -9,6 +9,7 @@ dependencies = [
     "anthropic>=0.40.0",
     "crewai>=0.80.0",
     "fastapi>=0.115.0",
+    "litellm>=1.89.0",
     "pydantic>=2.10.0",
     "python-dotenv>=1.0.0",
     "uvicorn[standard]>=0.32.0",

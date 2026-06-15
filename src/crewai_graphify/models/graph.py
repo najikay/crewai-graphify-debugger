@@ -82,3 +82,22 @@ class Graph(BaseModel, frozen=True):
     def edges_to(self, node_id: str) -> list[Edge]:
         """Return all edges whose target is *node_id*."""
         return [e for e in self.edges if e.target == node_id]
+
+    @classmethod
+    def merge(cls, graphs: list[Graph], file_path: str) -> Graph:
+        """Merge per-file graphs into one deduplicated graph.
+
+        Nodes are deduped by ``id`` (every module's ``__main__`` collapses into a
+        single node) and edges are deduped on the ``(source, target)`` key — the
+        same key the UI ForceGraph uses — so the persisted edge count matches the
+        rendered link count exactly.  First occurrence wins, making the result
+        deterministic for a sorted input list.
+        """
+        nodes: dict[str, Node] = {}
+        edges: dict[tuple[str, str], Edge] = {}
+        for g in graphs:
+            for n in g.nodes:
+                nodes[n.id] = n
+            for e in g.edges:
+                edges.setdefault((e.source, e.target), e)
+        return cls(file_path=file_path, nodes=list(nodes.values()), edges=list(edges.values()))

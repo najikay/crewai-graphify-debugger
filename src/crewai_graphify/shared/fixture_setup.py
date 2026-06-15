@@ -57,20 +57,16 @@ def _reset_workspace(push_log: Callable[[str], None]) -> None:
 
 def _rebuild_vault_graph(push_log: Callable[[str], None]) -> None:
     """Re-parse workspace/target/ recursively and regenerate vault artefacts."""
-    from crewai_graphify.models.graph import Edge, Graph, Node
+    from crewai_graphify.models.graph import Graph
     from crewai_graphify.services.graph_builder import GraphBuilder
     from crewai_graphify.services.obsidian_manager import ObsidianManager
 
     push_log("INFO: Rebuilding vault graph from workspace/target/ …")
     builder = GraphBuilder(vault_dir=_VAULT_DIR)
-    seen: dict[str, Node] = {}
-    all_edges: list[Edge] = []
-    for py_file in sorted(_TARGET_DIR.rglob("*.py")):
-        g = builder.build(py_file)
-        for n in g.nodes:
-            seen[n.id] = n
-        all_edges.extend(g.edges)
-    graph = Graph(file_path=str(_TARGET_DIR), nodes=list(seen.values()), edges=all_edges)
+    per_file = [builder.build(py_file) for py_file in sorted(_TARGET_DIR.rglob("*.py"))]
+    # Merge dedupes nodes by id and edges by (source, target) so the persisted
+    # edge count matches what the UI ForceGraph renders (no double-counting).
+    graph = Graph.merge(per_file, str(_TARGET_DIR))
     builder.save_graph(graph)
     builder.save_index_md(graph)
     ObsidianManager(vault_dir=_VAULT_DIR).save_hot_md(graph)

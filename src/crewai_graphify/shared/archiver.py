@@ -82,3 +82,10 @@ def archive_run(result: str, push_log: Callable[[str], None]) -> None:
         f"✅ VALIDATION PASSED: Changes verified. "
         f"Repository archived to workspace/results/run_{stamp}"
     )
+    # A real on-disk change can alter the AST (e.g. a newly added function call),
+    # so regenerate graph.json + index.md + hot.md from the patched target tree.
+    # Lazy import keeps shared.archiver and shared.fixture_setup free of any cycle.
+    from crewai_graphify.shared.fixture_setup import _rebuild_vault_graph
+
+    push_log("INFO: Patch changed the code structure — rebuilding vault graph…")
+    _rebuild_vault_graph(push_log)

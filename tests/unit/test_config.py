@@ -53,6 +53,12 @@ class TestPricingFor:
         for m in ("claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"):
             assert cfg.pricing_for(m) is not None
 
+    def test_deepseek_chat_is_priced(self, cfg: AppConfig) -> None:
+        """DeepSeek must be priced so the gatekeeper can budget/track its runs."""
+        p = cfg.pricing_for("deepseek-chat")
+        assert p.input_per_million_tokens_usd > 0
+        assert p.output_per_million_tokens_usd > 0
+
     def test_local_cost_multiplier_applied(self, cfg: AppConfig) -> None:
         p = cfg.pricing_for("claude-sonnet-4-6")
         assert p.local_cost_multiplier == pytest.approx(1.0)

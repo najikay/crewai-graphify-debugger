@@ -17,6 +17,7 @@ from crewai_graphify.agents.tasks import (
     reader_task,
     reasoner_task,
 )
+from crewai_graphify.agents.tools import reset_read_cap
 
 __all__ = ["build_crew"]
 
@@ -30,6 +31,7 @@ def build_crew(retry_hint: str = "") -> tuple[Crew, dict[str, str]]:
     navigator task via ``crew.kickoff(inputs=...)`` so the Navigator agent
     never needs to call a tool — eliminating hallucinated file names.
     """
+    reset_read_cap()  # clear the process-global read counter so re-runs aren't bricked
     hot_md_content = _HOT_MD.read_text(encoding="utf-8") if _HOT_MD.exists() else ""
     nav = navigator_agent()
     rdr = reader_agent()

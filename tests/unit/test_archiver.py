@@ -4,9 +4,18 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from crewai_graphify.shared.archiver import _detect_changes, archive_run
 
 _MOD = "crewai_graphify.shared.archiver"
+
+
+@pytest.fixture(autouse=True)
+def _mock_rebuild():  # type: ignore[no-untyped-def]
+    """Stub the heavy vault rebuild so archiver tests stay fast and side-effect free."""
+    with patch("crewai_graphify.shared.fixture_setup._rebuild_vault_graph") as m:
+        yield m
 
 
 def _make_workspace(
@@ -136,3 +145,27 @@ class TestArchiveRun:
             archive_run("output", logs.append)
         archived = list(results.rglob("f.py"))
         assert archived and archived[0].read_text(encoding="utf-8") == "patched!"
+
+
+class TestGraphRebuild:
+    def test_rebuild_called_on_success(self, tmp_path: Path, _mock_rebuild) -> None:  # type: ignore[no-untyped-def]
+        """A real on-disk change must trigger a vault graph rebuild (new AST edges)."""
+        target, fixture, results = _make_workspace(tmp_path, target_content="changed")
+        with (
+            patch(f"{_MOD}._TARGET", target),
+            patch(f"{_MOD}._FIXTURE", fixture),
+            patch(f"{_MOD}._RESULTS", results),
+        ):
+            archive_run("output", lambda _m: None)
+        assert _mock_rebuild.called
+
+    def test_rebuild_not_called_on_validation_failure(self, tmp_path: Path, _mock_rebuild) -> None:  # type: ignore[no-untyped-def]
+        """No physical change ⇒ validation fails and the graph is NOT rebuilt."""
+        target, fixture, results = _make_workspace(tmp_path)  # identical content
+        with (
+            patch(f"{_MOD}._TARGET", target),
+            patch(f"{_MOD}._FIXTURE", fixture),
+            patch(f"{_MOD}._RESULTS", results),
+        ):
+            archive_run("output", lambda _m: None)
+        assert not _mock_rebuild.called

@@ -6,10 +6,19 @@ from pathlib import Path
 
 import pytest
 
-from crewai_graphify.models.graph import EdgeType, Graph, NodeType
+from crewai_graphify.models.graph import Edge, EdgeType, Graph, Node, NodeType
 from crewai_graphify.services.graph_builder import GraphBuilder
 
 TARGET = Path("workspace/target/broken-python/polygons/polygons.py")
+
+
+def _mnode(node_id: str) -> Node:
+    return Node(id=node_id, name=node_id, node_type=NodeType.FUNCTION,
+                file_path="f.py", start_line=1, end_line=2)
+
+
+def _medge(src: str, tgt: str) -> Edge:
+    return Edge(source=src, target=tgt, edge_type=EdgeType.CALLS, weight=0.9)
 
 
 @pytest.fixture()
@@ -109,3 +118,45 @@ class TestPersistence:
 
     def test_save_index_md_contains_node(self, builder: GraphBuilder, graph: Graph) -> None:
         assert "calc_polygon_details" in builder.save_index_md(graph).read_text()
+
+
+class TestGraphMerge:
+    def test_dedupes_identical_edges_across_files(self) -> None:
+        """Duplicate (source, target) edges from multiple files collapse to one."""
+        g1 = Graph(file_path="a.py", nodes=[_mnode("__main__"), _mnode("welcome")],
+                   edges=[_medge("__main__", "welcome")])
+        g2 = Graph(file_path="b.py", nodes=[_mnode("__main__"), _mnode("welcome")],
+                   edges=[_medge("__main__", "welcome")])
+        merged = Graph.merge([g1, g2], "workspace/target")
+        assert len(merged.edges) == 1
+
+    def test_dedupes_nodes_by_id(self) -> None:
+        """The shared __main__ node id collapses to a single node."""
+        g1 = Graph(file_path="a.py", nodes=[_mnode("__main__")])
+        g2 = Graph(file_path="b.py", nodes=[_mnode("__main__")])
+        assert len(Graph.merge([g1, g2], "t").nodes) == 1
+
+    def test_keeps_distinct_edges(self) -> None:
+        """Edges with different targets are preserved."""
+        g = Graph(file_path="a.py",
+                  nodes=[_mnode("__main__"), _mnode("a"), _mnode("b")],
+                  edges=[_medge("__main__", "a"), _medge("__main__", "b")])
+        assert len(Graph.merge([g], "t").edges) == 2
+
+    def test_first_occurrence_wins(self) -> None:
+        """The first edge for a (source, target) pair is the one retained."""
+        first = Edge(source="x", target="y", edge_type=EdgeType.CALLS, weight=0.9)
+        second = Edge(source="x", target="y", edge_type=EdgeType.INSTANTIATES, weight=0.1)
+        g1 = Graph(file_path="a.py", nodes=[_mnode("x"), _mnode("y")], edges=[first])
+        g2 = Graph(file_path="b.py", nodes=[_mnode("x"), _mnode("y")], edges=[second])
+        merged = Graph.merge([g1, g2], "t")
+        assert merged.edges[0].edge_type == EdgeType.CALLS
+
+    def test_empty_input_yields_empty_graph(self) -> None:
+        merged = Graph.merge([], "t")
+        assert merged.nodes == [] and merged.edges == []
+        assert merged.file_path == "t"
+
+    def test_merged_file_path_is_set(self) -> None:
+        g = Graph(file_path="a.py", nodes=[_mnode("__main__")])
+        assert Graph.merge([g], "workspace/target").file_path == "workspace/target"

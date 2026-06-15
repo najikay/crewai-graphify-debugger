@@ -12,6 +12,7 @@ from crewai_graphify.agents.tools import (
     apply_patch,
     read_code_slice,
     read_vault_document,
+    reset_read_cap,
 )
 
 _VAULT = "crewai_graphify.agents.tools._VAULT"
@@ -164,6 +165,24 @@ class TestReadCodeSliceCap:
             result = read_code_slice._run(file_path="f.py", start_line=1, end_line=1)
         assert "[ERROR]" in result
         assert "cap" in result.lower()
+
+    def test_reset_read_cap_clears_counter(self) -> None:
+        """The public reset_read_cap() must zero the process-global counter."""
+        _read_counter.increment()
+        _read_counter.increment()
+        reset_read_cap()
+        assert _read_counter.count == 0
+
+    def test_reads_work_again_after_reset(self, tmp_path: Path) -> None:
+        """After hitting the cap, reset_read_cap() must un-brick read_code_slice."""
+        (tmp_path / "f.py").write_text("hello", encoding="utf-8")
+        with patch(_TARGET, tmp_path):
+            for _ in range(_MAX_READS + 2):  # blow past the cap
+                read_code_slice._run(file_path="f.py", start_line=1, end_line=1)
+            reset_read_cap()
+            result = read_code_slice._run(file_path="f.py", start_line=1, end_line=1)
+        assert "[ERROR]" not in result
+        assert "hello" in result
 
     def test_counter_increments_per_call(self, tmp_path: Path) -> None:
         (tmp_path / "f.py").write_text("x", encoding="utf-8")

@@ -58,8 +58,12 @@ export function useDebuggerSession(): DebuggerSession {
 
   const handleReset = useCallback(async () => {
     try {
+      // POST /api/reset runs _reset_workspace() (physical pristine-fixture copy)
+      // and rebuilds the vault graph on the backend.
       await axios.post("/api/reset");
+      // On success, wipe run state and re-fetch the pristine graph for a fresh render.
       setPatchedFiles(new Set());
+      setLogs([]);
       await loadGraph();
     } catch {
       /* backend may be down — keep current state */

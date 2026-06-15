@@ -5,7 +5,16 @@ import pytest
 
 from crewai_graphify.models.llm import LLMPayload, LLMResponse, ModelPricing
 from crewai_graphify.shared.gatekeeper import ApiGatekeeper
-from crewai_graphify.shared.version import UnknownModelError
+from crewai_graphify.shared.version import UnknownModelError, VersionValidator
+
+
+class TestAllowList:
+    def test_deepseek_chat_is_allowed(self) -> None:
+        """DeepSeek must pass model validation so its calls reach the gatekeeper."""
+        assert VersionValidator().validate_model("deepseek-chat") is True
+
+    def test_deepseek_chat_in_allowed_models_property(self) -> None:
+        assert "deepseek-chat" in VersionValidator().allowed_models
 
 # ===========================================================================
 # Singleton enforcement

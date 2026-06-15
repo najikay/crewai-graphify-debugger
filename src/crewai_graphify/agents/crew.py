@@ -8,34 +8,27 @@ instantiate fresh agents per run without sharing state.
 from __future__ import annotations
 
 import os
-from typing import Any
 
-from crewai import LLM, Agent
+from crewai import Agent
 
 from crewai_graphify.agents.tools import apply_patch, read_code_slice
-from crewai_graphify.sdk.claude_client import ClaudeClient
+from crewai_graphify.sdk.claude_client import GatekeeperLLM
 
 __all__ = ["navigator_agent", "patcher_agent", "reader_agent", "reasoner_agent"]
 
 
-def _make_llm() -> Any:
-    """Return the LLM selected by ``LLM_PROVIDER`` env var (default: ``claude``).
+def _make_llm() -> GatekeeperLLM:
+    """Return the gatekept LLM selected by ``LLM_PROVIDER`` (default: ``claude``).
 
-    Supported providers
-    -------------------
-    ``claude``   — uses ``ClaudeClient`` (routes through ``ApiGatekeeper``)
-    ``deepseek`` — uses ``crewai.LLM`` with the DeepSeek OpenAI-compatible API;
-                   reads ``DEFAULT_MODEL`` (default ``deepseek-chat``) and
-                   ``DEEPSEEK_API_KEY`` from the environment.
+    Both providers return a ``GatekeeperLLM`` so EVERY call routes through the
+    ``ApiGatekeeper`` (budget + telemetry).  Only the payload ``model`` differs;
+    the concrete API is chosen by which ``_ClientProtocol`` adapter the gatekeeper
+    was initialised with (Anthropic for ``claude``, DeepSeek for ``deepseek``).
     """
     provider = os.getenv("LLM_PROVIDER", "claude").lower()
     if provider == "deepseek":
-        model = os.getenv("DEFAULT_MODEL", "deepseek-chat")
-        return LLM(
-            model=f"deepseek/{model}",
-            api_key=os.getenv("DEEPSEEK_API_KEY", ""),
-        )
-    return ClaudeClient()
+        return GatekeeperLLM(model=os.getenv("DEFAULT_MODEL", "deepseek-chat"))
+    return GatekeeperLLM()
 
 
 def navigator_agent() -> Agent:

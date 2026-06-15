@@ -146,10 +146,20 @@ The `session_ledger.json` file accumulates all `TransactionRecord` objects and a
       "output_per_million_tokens_usd": 4.00,
       "cache_write_per_million_tokens_usd": 1.00,
       "cache_read_per_million_tokens_usd": 0.08
+    },
+    "deepseek-chat": {
+      "input_per_million_tokens_usd": 0.27,
+      "output_per_million_tokens_usd": 1.10,
+      "cache_write_per_million_tokens_usd": 0.27,
+      "cache_read_per_million_tokens_usd": 0.07
     }
   }
 }
 ```
+
+> **הערה (עברית):** `deepseek-chat` נוסף לטבלת ה-pricing כדי שה-`BudgetTracker`
+> יוכל לתמחר ולרשום הרצות **DeepSeek** דרך ה-`ApiGatekeeper`, בדיוק כמו מודלי
+> Claude. כל ה-providers נספרים כעת ב-`SessionLedger` (ראו PLAN §10.2).
 
 ---
 

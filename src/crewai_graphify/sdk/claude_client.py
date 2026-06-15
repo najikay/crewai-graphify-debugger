@@ -13,7 +13,7 @@ from pydantic import model_validator
 from crewai_graphify.models.llm import LLMPayload
 from crewai_graphify.shared.gatekeeper import ApiGatekeeper
 
-__all__ = ["ClaudeClient"]
+__all__ = ["ClaudeClient", "GatekeeperLLM"]
 
 _CHARS_PER_TOKEN = 4
 _DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -62,3 +62,9 @@ class ClaudeClient(BaseLLM):
             input_token_estimate=max(1, len(prompt) // _CHARS_PER_TOKEN),
         )
         return ApiGatekeeper().call(payload).content
+
+
+# Provider-neutral alias: this class is simply "the gatekept CrewAI LLM" — the
+# concrete provider is decided by which _ClientProtocol adapter the gatekeeper
+# is initialised with. Used for DeepSeek (model="deepseek-chat") and Claude alike.
+GatekeeperLLM = ClaudeClient

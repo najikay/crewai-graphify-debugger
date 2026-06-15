@@ -10,7 +10,7 @@ from pathlib import Path
 
 from crewai.tools import tool
 
-__all__ = ["apply_patch", "read_code_slice", "read_vault_document"]
+__all__ = ["apply_patch", "read_code_slice", "read_vault_document", "reset_read_cap"]
 
 _VAULT = Path("workspace/vault")
 _TARGET = Path("workspace/target")
@@ -37,6 +37,17 @@ class _ReadCounter:
 
 
 _read_counter = _ReadCounter()
+
+
+def reset_read_cap() -> None:
+    """Reset the per-run read counter to 0.
+
+    The read counter is process-global, so in a long-running server it survives
+    between pipeline runs.  Without this reset the second run would start already
+    at the cap and the Reader agent would be bricked on its first ``read_code_slice``
+    call.  Invoked by ``build_crew()`` so every run (and retry) starts fresh.
+    """
+    _read_counter.reset()
 
 
 def _resolve_target_path(file_path: str) -> Path:
